@@ -19,6 +19,7 @@ INTEGER,ALLOCATABLE              :: RefineList(:)
 REAL,ALLOCATABLE                 :: refineBoundary(:)
 INTEGER,ALLOCATABLE              :: TreeSidesToRefine(:,:)
 REAL                             :: sphereCenter(3),sphereRadius
+REAL                             :: cylinderCenter(3),cylinderAxis(3),cylinderRadius
 REAL                             :: shellCenter(3),shellRadius_inner,shellRadius_outer
 REAL                             :: boxBoundary(6)
 !-----------------------------------------------------------------------------------------------------------------------------------

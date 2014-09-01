@@ -36,11 +36,6 @@ void p4_refine_mesh(p4est_t  *p4est,
   int                 level;
   int                 balance;
 
-  P4EST_GLOBAL_PRODUCTIONF
-    ("DEBUG: refine_level  %d \n",refine_level);
-  P4EST_GLOBAL_PRODUCTIONF
-    ("DEBUG: New connectivity with %lld trees and %lld vertices\n",
-     (long long) p4est->connectivity->num_trees, (long long) p4est->connectivity->num_vertices);
 
   // Set refinement function pointer called by refine_hopest to function provided by HOPEST
   refine_f=myrefine_f;
@@ -60,26 +55,16 @@ void p4_refine_mesh(p4est_t  *p4est,
    * Note that this balance step is not strictly necessary since we are using
    * uniform refinement but may be required for other types of refinement.
    */
-  P4EST_GLOBAL_PRODUCTIONF
-    ("DEBUG: before first vtk %p  \n",p4est);
-  printf("DEBUG: Got Geometry at adress %p\n",geom);
-  printf("DEBUG GEOMETRY %s\n",geom->name);
   p4est_vtk_write_file (p4est,geom, P4EST_STRING "_afterrefine");
-  P4EST_GLOBAL_PRODUCTIONF
-    ("DEBUG: after first vtk %d  \n",0);
 
   balance = 1;
   if (balance) {
     p4est_balance (p4est, P4EST_CONNECT_FULL, NULL);
     p4est_partition (p4est, 0, NULL);
   }
-  P4EST_GLOBAL_PRODUCTIONF
-    ("DEBUG: before vtk %d  \n",0);
 
   /* Write the forest to disk for visualization, one file per processor. */
   p4est_vtk_write_file (p4est, geom, P4EST_STRING "_afterbalance");
 
-  P4EST_GLOBAL_PRODUCTIONF
-    ("DEBUG: before ghosts %d  \n",0);
 }
 

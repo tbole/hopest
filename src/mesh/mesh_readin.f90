@@ -490,7 +490,6 @@ IF(num_periodics.GT.0) THEN
           aSide=>aSide%connection
         END IF
         bSide=>aSide%connection
-        !WRITE(*,*)'DEBUG,aSide%tmp,bSide%tmp:',aSide%tmp,bSide%tmp
         JoinFaces(1,iPeriodic)=aSide%Elem%ind-1  !treeID of face with smaller p4est locfaceID
         JoinFaces(2,iPeriodic)=bSide%Elem%ind-1  ! neighbor tree id
         JoinFaces(3,iPeriodic)=aSide%tmp         ! p4est locSideID
@@ -500,7 +499,6 @@ IF(num_periodics.GT.0) THEN
           IF(HFlip_test.EQ.HFlip) EXIT
         END DO
         JoinFaces(5,iPeriodic)=PFlip
-        WRITE(*,*)'DEBUG,JoinFaces,iPeriodic',iPeriodic,JoinFaces(:,iPeriodic)
       END IF
     END DO !iLocSide
   END DO !iTree

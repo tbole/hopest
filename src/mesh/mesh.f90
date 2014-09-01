@@ -234,7 +234,6 @@ ELSE
 END IF
 ! For Ngeo>1 and Ngeo_out < Ngeo, we need to correct the mortar faces!!
 
-!RETURN
 
 DO iElem=1,nElems
   iTree=QuadToTree(iElem)+1

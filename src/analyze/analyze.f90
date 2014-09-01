@@ -51,7 +51,7 @@ REAL,ALLOCATABLE           :: xi(:)
 
 checkJacobian=GETLOGICAL('checkJacobian','T')
 
-WRITE(tmpstr,'(I5)')2*Ngeo_out
+WRITE(tmpstr,'(I5)')FLOOR(1.5*Ngeo_out)
 Nanalyze=GETINT('Nanalyze',tmpstr)
 
 ALLOCATE(xi(0:Nanalyze))

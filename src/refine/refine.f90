@@ -44,7 +44,6 @@ IMPLICIT NONE
 TYPE(C_FUNPTR)              :: refineFunc
 INTEGER                     :: iRefine,nRefines,i
 INTEGER,ALLOCATABLE         :: refineType(:)
-CHARACTER(LEN=5)            :: tmpstr
 !===================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)')'BUILD P4EST MESH AND REFINE ...'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -56,8 +55,7 @@ nRefines=CNTSTR('refineType',1)
 SWRITE(UNIT_stdOut,'(A,I0)')'Number of refines : ',nRefines
 ALLOCATE(refineType(nRefines))
 
-WRITE(tmpstr,'(I5)')2*Ngeo
-NSuper =GETINT('Nsuper',tmpstr) ! default conform refinement
+NSuper =GETINT('Nsuper','2') ! default conform refinement
 ALLOCATE(Xi_Nsuper(0:Nsuper))
 DO i=0,Nsuper
   Xi_Nsuper(i)=-1.+2.*REAL(i)/REAL(Nsuper)
@@ -135,6 +133,7 @@ SUBROUTINE InitRefineGeom()
 USE MODH_Globals
 USE MODH_Refine_Vars, ONLY: refineGeomType,sphereCenter,sphereRadius,boxBoundary 
 USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
+USE MODH_Refine_Vars, ONLY: cylinderCenter,CylinderAxis,CylinderRadius 
 USE MODH_Readintools, ONLY:GETREALARRAY,GETINT,GETREAL
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -158,6 +157,11 @@ SELECT CASE(refineGeomType)
     IF(shellRadius_inner .GE. shellRadius_outer) STOP 'inner radius is greater or equal to outer radius!'
   CASE(2) ! Box 
     boxBoundary=GETREALARRAY('boxBoundary',6)
+  CASE(3) ! CYLINDER
+    cylinderCenter =GETREALARRAY('cylinderCenter',3)
+    CylinderAxis =GETREALARRAY('CylinderAxis',3)
+    CylinderAxis=CylinderAxis/VECNORM(CylinderAxis)
+    CylinderRadius =GETREAL('CylinderRadius')
   CASE DEFAULT
     STOP 'no refineGeomType defined'
 END SELECT
@@ -247,9 +251,7 @@ FUNCTION RefineByGeom(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MODH_Refine_Vars, ONLY: refineGeomType,refineLevel
-USE MODH_Refine_Vars, ONLY: sphereCenter,sphereRadius,boxBoundary
-USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
+USE MODH_Refine_Vars, ONLY: refineLevel
 USE MODH_Refine_Vars, ONLY: NSuper,Xi_Nsuper
 USE MODH_Mesh_Vars,   ONLY: XGeo,Ngeo
 USE MODH_Mesh_Vars,   ONLY: wBary_Ngeo,xi_Ngeo
@@ -321,75 +323,72 @@ DO k=0,NGeo
     END DO
   END DO
 END DO
-SELECT CASE (refineGeomType)
-CASE(1)   ! SPHERE
-  ! check Nsuper Nodes
-  DO k=0,Nsuper
-    DO j=0,Nsuper
-      DO i=0,Nsuper
-        XCorner(:)=XGeoSuper(:,i,j,k)
-        test=SQRT((XCorner(1)-sphereCenter(1))**2+(XCorner(2)-sphereCenter(2))**2+(XCorner(3)-sphereCenter(3))**2)
-        IF (test.LE.sphereRadius) THEN
-          refineByGeom = 1
-          RETURN
-        END IF
-      END DO ! i
-    END DO ! j 
-  END DO ! k
-  ! check barycenter
-  test=SQRT((XBaryElem(1)-sphereCenter(1))**2+(XBaryElem(2)-sphereCenter(2))**2+(XBaryElem(3)-sphereCenter(3))**2)
-  IF (test.LE.sphereRadius) THEN
-    refineByGeom = 1
-  ELSE
-    refineByGeom = 0
-  END IF
-
-CASE(11)   ! SPHERE SHELL
-  ! check Nsuper Nodes
-  DO k=0,Nsuper
-    DO j=0,Nsuper
-      DO i=0,Nsuper
-        XCorner(:)=XGeoSuper(:,i,j,k)
-        test=SQRT((XCorner(1)-shellCenter(1))**2+(XCorner(2)-shellCenter(2))**2+(XCorner(3)-shellCenter(3))**2)
-        IF ((test.LE.shellRadius_outer) .AND. (test.GE.shellRadius_inner)) THEN
-          refineByGeom = 1
-          RETURN
-        END IF
-      END DO ! i
-    END DO ! j 
-  END DO ! k
-  ! check barycenter
-  test=SQRT((XBaryElem(1)-shellCenter(1))**2+(XBaryElem(2)-shellCenter(2))**2+(XBaryElem(3)-shellCenter(3))**2)
-  IF ((test.LE.shellRadius_outer) .AND. (test.GE.shellRadius_inner)) THEN
-    refineByGeom = 1
-  ELSE
-    refineByGeom = 0
-  END IF
-   
-CASE(2)   ! BOX
-  ! check Nsuper Nodes
-  DO k=0,Nsuper
-    DO j=0,Nsuper
-      DO i=0,Nsuper
-        XCorner(:)=XGeoSuper(:,i,j,k)
-        IF (XCorner(1) .GE. boxBoundary(1) .AND. XCorner(1) .LE. boxBoundary(2) .AND. & 
-            XCorner(2) .GE. boxBoundary(3) .AND. XCorner(2) .LE. boxBoundary(4) .AND. &
-            XCorner(3) .GE. boxBoundary(5) .AND. XCorner(3) .LE. boxBoundary(6)) THEN
-          refineByGeom = 1
-          RETURN
-        END IF
-      END DO ! i
-    END DO ! j 
-  END DO ! k
-  ! refineBoundary(xmin,xmax,ymin,ymax,zmin,zmax)
-  IF (XBaryElem(1) .GE. boxBoundary(1) .AND. XBaryElem(1) .LE. boxBoundary(2) .AND. & 
-      XBaryElem(2) .GE. boxBoundary(3) .AND. XBaryElem(2) .LE. boxBoundary(4) .AND. &
-      XBaryElem(3) .GE. boxBoundary(5) .AND. XBaryElem(3) .LE. boxBoundary(6)) THEN
-    refineByGeom = 1
-  END IF
-END SELECT
+! check barycenter
+IF (CheckGeom(XBaryElem)) THEN
+  refineByGeom = 1
+  RETURN
+END IF
+! check Nsuper Nodes
+DO k=0,Nsuper
+  DO j=0,Nsuper
+    DO i=0,Nsuper
+      IF (CheckGeom(XGeoSuper(:,i,j,k))) THEN
+        refineByGeom = 1
+        RETURN
+      END IF
+    END DO ! i
+  END DO ! j 
+END DO ! k
 END FUNCTION RefineByGeom
 
+
+FUNCTION CheckGeom(x_in)
+!===================================================================================================================================
+! 
+!===================================================================================================================================
+! MODULES
+USE MODH_Globals,     ONLY: VECNORM
+USE MODH_Refine_Vars, ONLY: refineGeomType
+USE MODH_Refine_Vars, ONLY: sphereCenter,sphereRadius,boxBoundary
+USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
+USE MODH_Refine_Vars, ONLY: cylinderCenter,CylinderAxis,CylinderRadius 
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) ::x_in(3)
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+LOGICAL :: checkGeom
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: test
+!-----------------------------------------------------------------------------------------------------------------------------------
+CheckGeom=.FALSE.
+SELECT CASE (refineGeomType)
+CASE(1)   ! SPHERE
+  test=VECNORM(x_in-SphereCenter)
+  IF (test.LE.sphereRadius) THEN
+    CheckGeom= .TRUE.
+  END IF
+CASE(11) ! sphere shell
+  test=VECNORM(x_in-shellCenter)
+  IF ((test.LE.shellRadius_outer) .AND. (test.GE.shellRadius_inner)) THEN
+    CheckGeom= .TRUE.
+  END IF
+CASE(2) ! box
+  IF (x_in(1) .GE. boxBoundary(1) .AND. x_in(1) .LE. boxBoundary(2) .AND. & 
+      x_in(2) .GE. boxBoundary(3) .AND. x_in(2) .LE. boxBoundary(4) .AND. &
+      x_in(3) .GE. boxBoundary(5) .AND. x_in(3) .LE. boxBoundary(6)) THEN
+    CheckGeom= .TRUE.
+  END IF
+CASE(3)   ! CYLINDER
+  test=VECNORM((x_in-CylinderCenter)-CylinderAxis*SUM(CylinderAxis*(x_in-CylinderCenter)))
+  IF (test.LE.cylinderRadius) THEN
+    CheckGeom= .TRUE.
+  END IF
+END SELECT
+END FUNCTION CheckGeom
 
 FUNCTION RefineFirst(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
