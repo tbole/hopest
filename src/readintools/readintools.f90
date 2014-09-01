@@ -1,10 +1,10 @@
 #include "hopest_f.h"
 
-MODULE MOD_ReadInTools
+MODULE MODH_ReadInTools
 !===================================================================================================================================
 ! MODULES
-USE MOD_Globals
-USE MOD_ISO_VARYING_STRING
+USE MODH_Globals
+USE MODH_ISO_VARYING_STRING
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
@@ -77,6 +77,8 @@ END INTERFACE
 INTERFACE DeleteString
   MODULE PROCEDURE DeleteString
 END INTERFACE
+
+
 
 TYPE tString
   TYPE(Varying_String)::Str
@@ -381,7 +383,7 @@ SUBROUTINE IgnoredStrings()
 ! Prints out remaining strings in list after read-in is complete
 !===================================================================================================================================
 ! MODULES
-USE MOD_ISO_VARYING_STRING
+USE MODH_ISO_VARYING_STRING
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -411,7 +413,7 @@ SUBROUTINE FillStrings(IniFile)
 ! with "firstString"
 !===================================================================================================================================
 ! MODULES
-USE MOD_Globals
+USE MODH_Globals
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -585,7 +587,7 @@ DO WHILE(ASSOCIATED(FirstString))
   DEALLOCATE(FirstString)
   FirstString=>Str
 END DO
-NULLIFY(FirstString)
+DEALLOCATE(FirstString)
 ReadInDone=.FALSE.
 END SUBROUTINE DeleteStrings
 
@@ -680,4 +682,4 @@ DO iLen=1,nLen
 END DO
 END SUBROUTINE LowCase
 
-END MODULE MOD_ReadInTools
+END MODULE MODH_ReadInTools

@@ -1,6 +1,6 @@
 #include "hopest_f.h"
 
-MODULE MOD_Refine
+MODULE MODH_Refine
 !===================================================================================================================================
 ! Add comments please!
 !===================================================================================================================================
@@ -26,11 +26,12 @@ SUBROUTINE RefineMesh()
 ! Subroutine to read the mesh from a mesh data file
 !===================================================================================================================================
 ! MODULES
-USE MOD_Globals
-USE MOD_Refine_Vars
-USE MOD_Refine_Binding,ONLY: p4_refine_mesh
-USE MOD_P4EST_Vars,    ONLY: p4est,mesh,geom
-USE MOD_Readintools,   ONLY: GETINT,CNTSTR
+USE MODH_Globals
+USE MODH_Refine_Vars
+USE MODH_Mesh_Vars,     ONLY: Ngeo
+USE MODH_Refine_Binding,ONLY: p4_refine_mesh
+USE MODH_P4EST_Vars,    ONLY: p4est,mesh,geom
+USE MODH_Readintools,   ONLY: GETINT,CNTSTR
 USE, INTRINSIC :: ISO_C_BINDING
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -41,19 +42,25 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 TYPE(C_FUNPTR)              :: refineFunc
-INTEGER                     :: iRefine,nRefines
+INTEGER                     :: iRefine,nRefines,i
 INTEGER,ALLOCATABLE         :: refineType(:)
 !===================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)')'BUILD P4EST MESH AND REFINE ...'
 SWRITE(UNIT_StdOut,'(132("-"))')
 
-!ALLOCATE(RefineList(nElems))
+!ALLOCATE(RefineList(nTrees))
 !RefineList=0
 
 nRefines=CNTSTR('refineType',1)
 SWRITE(UNIT_stdOut,'(A,I0)')'Number of refines : ',nRefines
 ALLOCATE(refineType(nRefines))
 
+NSuper =GETINT('Nsuper','2') ! default conform refinement
+ALLOCATE(Xi_Nsuper(0:Nsuper))
+DO i=0,Nsuper
+  Xi_Nsuper(i)=-1.+2.*REAL(i)/REAL(Nsuper)
+END DO
+  
 
 DO iRefine=1,nRefines
   refineType =GETINT('refineType','1') ! default conform refinement
@@ -89,10 +96,10 @@ SUBROUTINE InitRefineBoundaryElems()
 ! init the refinment list
 !===================================================================================================================================
 ! MODULES
-USE MOD_Globals
-USE MOD_Refine_Vars, ONLY: TreeSidesToRefine,refineBCIndex
-USE MOD_P4EST_Vars,  ONLY: P2H_FaceMap
-USE MOD_Mesh_Vars,   ONLY: Elems,nElems
+USE MODH_Globals
+USE MODH_Refine_Vars,ONLY: TreeSidesToRefine,refineBCIndex
+USE MODH_Mesh_Vars,  ONLY: Trees,nTrees
+USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -101,15 +108,15 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                     :: iElem,iSide
+INTEGER                     :: iTree,iSide
 !===================================================================================================================================
 ! These are the refinement functions which are called by p4est
-ALLOCATE(TreeSidesToRefine(0:5,1:nElems))
+ALLOCATE(TreeSidesToRefine(0:5,1:nTrees))
 TreeSidesToRefine=0
-DO iElem=1,nElems
+DO iTree=1,nTrees
   DO iSide=0,5
-    IF (Elems(iElem)%ep%Side(P2H_FaceMap(iSide))%sp%BCIndex.EQ.refineBCIndex) THEN
-      TreeSidesToRefine(iSide,iElem)=1
+    IF (Trees(iTree)%ep%Side(P2H_FaceMap(iSide))%sp%BCIndex.EQ.refineBCIndex) THEN
+      TreeSidesToRefine(iSide,iTree)=1
     END IF
   END DO
 END DO
@@ -123,10 +130,11 @@ SUBROUTINE InitRefineGeom()
 ! init the geometric refinment
 !===================================================================================================================================
 ! MODULES
-USE MOD_Globals
-USE MOD_Refine_Vars, ONLY: refineGeomType,sphereCenter,sphereRadius,boxBoundary 
-USE MOD_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
-USE MOD_Readintools,ONLY:GETREALARRAY,GETINT,GETREAL
+USE MODH_Globals
+USE MODH_Refine_Vars, ONLY: refineGeomType,sphereCenter,sphereRadius,boxBoundary 
+USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
+USE MODH_Refine_Vars, ONLY: cylinderCenter,CylinderAxis,CylinderRadius 
+USE MODH_Readintools, ONLY:GETREALARRAY,GETINT,GETREAL
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -149,6 +157,11 @@ SELECT CASE(refineGeomType)
     IF(shellRadius_inner .GE. shellRadius_outer) STOP 'inner radius is greater or equal to outer radius!'
   CASE(2) ! Box 
     boxBoundary=GETREALARRAY('boxBoundary',6)
+  CASE(3) ! CYLINDER
+    cylinderCenter =GETREALARRAY('cylinderCenter',3)
+    CylinderAxis =GETREALARRAY('CylinderAxis',3)
+    CylinderAxis=CylinderAxis/VECNORM(CylinderAxis)
+    CylinderRadius =GETREAL('CylinderRadius')
   CASE DEFAULT
     STOP 'no refineGeomType defined'
 END SELECT
@@ -161,7 +174,7 @@ FUNCTION RefineAll(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MOD_Refine_Vars, ONLY: RefineLevel
+USE MODH_Refine_Vars, ONLY: RefineLevel
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -187,7 +200,7 @@ FUNCTION RefineByList(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MOD_Refine_Vars, ONLY: refineLevel,TreeSidesToRefine
+USE MODH_Refine_Vars, ONLY: refineLevel,TreeSidesToRefine
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -238,13 +251,12 @@ FUNCTION RefineByGeom(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MOD_Refine_Vars, ONLY: refineGeomType,refineLevel
-USE MOD_Refine_Vars, ONLY: sphereCenter,sphereRadius,boxBoundary
-USE MOD_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
-USE MOD_Mesh_Vars,   ONLY: XGeo,Ngeo
-USE MOD_Mesh_Vars,   ONLY: wBary_Ngeo,xi_Ngeo
-USE MOD_Basis,       ONLY: LagrangeInterpolationPolys 
-USE MOD_ChangeBasis, ONLY: ChangeBasis3D_XYZ
+USE MODH_Refine_Vars, ONLY: refineLevel
+USE MODH_Refine_Vars, ONLY: NSuper,Xi_Nsuper
+USE MODH_Mesh_Vars,   ONLY: XGeo,Ngeo
+USE MODH_Mesh_Vars,   ONLY: wBary_Ngeo,xi_Ngeo
+USE MODH_Basis,       ONLY: LagrangeInterpolationPolys 
+USE MODH_ChangeBasis, ONLY: ChangeBasis3D_XYZ
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -256,9 +268,11 @@ INTEGER(KIND=C_INT ),INTENT(IN),VALUE :: childID
 REAL                                  :: xi0(3)
 REAL                                  :: xiBary(3)
 REAL                                  :: dxi,length
-REAL,DIMENSION(0:Ngeo,0:Ngeo)         :: Vdm_xi,Vdm_eta,Vdm_zeta
-REAL                                  :: XCorner(3), XBaryQuad(3),test,IntSize,sIntSize
-REAL                                  :: XGeoQuad(3,0:NGeo,0:NGeo,0:NGeo)
+REAL,DIMENSION(0:Nsuper,0:Ngeo)       :: Vdm_xi,Vdm_eta,Vdm_zeta
+REAL                                  :: XCorner(3), XBaryElem(3),test
+INTEGER                               :: IntSize
+REAL                                  :: sIntSize
+REAL                                  :: XGeoSuper(3,0:Nsuper,0:Nsuper,0:Nsuper)
 REAL                                  :: l_xi(0:NGeo),l_eta(0:NGeo),l_zeta(0:NGeo),l_etazeta
 INTEGER                               :: i,j,k
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -273,24 +287,24 @@ INTEGER(KIND=C_INT) :: refineByGeom
 refineByGeom = 0
 IF(level.GE.refineLevel) RETURN
 
-IntSize=2.**19 !TODO: use sIntSize from mesh_vars. not initialized at this stage yet
-sIntSize=1./IntSize
+IntSize=2**19 !TODO: use sIntSize from mesh_vars. not initialized at this stage yet
+sIntSize=1./REAL(IntSize)
 
 ! transform p4est first corner coordinates (integer from 0... intsize) to [-1,1] reference element of its tree
 xi0(1)=-1.+2.*REAL(x)*sIntSize
 xi0(2)=-1.+2.*REAL(y)*sIntSize
 xi0(3)=-1.+2.*REAL(z)*sIntSize
-! length of the quadrant in reference coordinates of its tree [-1,1]
+! length of the element / quadrant in reference coordinates of its tree [-1,1]
 length=2./REAL(2**level)
 ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
-DO i=0,Ngeo  
-  dxi=0.5*(xi_Ngeo(i)+1.)*Length
+DO i=0,Nsuper 
+  dxi=0.5*(xi_Nsuper(i)+1.)*Length
   CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(i,:)) 
   CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(i,:)) 
   CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(i,:)) 
 END DO
 !interpolate tree HO mapping to quadrant HO mapping
-CALL ChangeBasis3D_XYZ(3,Ngeo,Ngeo,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo(:,:,:,:,tree),XgeoQuad(:,:,:,:))
+CALL ChangeBasis3D_XYZ(3,Ngeo,Nsuper,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo(:,:,:,:,tree),XGeoSuper(:,:,:,:))
 
 
 ! Barycenter
@@ -300,84 +314,81 @@ CALL LagrangeInterpolationPolys(xiBary(1),Ngeo,xi_Ngeo,wBary_Ngeo,l_xi(:))
 CALL LagrangeInterpolationPolys(xiBary(2),Ngeo,xi_Ngeo,wBary_Ngeo,l_eta(:)) 
 CALL LagrangeInterpolationPolys(xiBary(3),Ngeo,xi_Ngeo,wBary_Ngeo,l_zeta(:)) 
 !interpolate tree HO mapping to quadrant HO mapping
-XBaryQuad(:)=0.
-  DO k=0,NGeo
-    DO j=0,NGeo
-      l_etazeta=l_eta(j)*l_zeta(k)
-      DO i=0,NGeo
-        XBaryQuad(:)=XBaryQuad(:)+XgeoQuad(:,i,j,k)*l_xi(i)*l_etazeta
-      END DO
+XBaryElem(:)=0.
+DO k=0,NGeo
+  DO j=0,NGeo
+    l_etazeta=l_eta(j)*l_zeta(k)
+    DO i=0,NGeo
+      XBaryElem(:)=XBaryElem(:)+Xgeo(:,i,j,k,tree)*l_xi(i)*l_etazeta
     END DO
   END DO
-SELECT CASE (refineGeomType)
-CASE(1)   ! SPHERE
-  ! check NGeo Nodes (TODO: supersampling to NSuper for this check)
-  DO k=0,Ngeo
-    DO j=0,Ngeo
-      DO i=0,Ngeo
-        XCorner(:)=XgeoQuad(:,i,j,k)
-        test=SQRT((XCorner(1)-sphereCenter(1))**2+(XCorner(2)-sphereCenter(2))**2+(XCorner(3)-sphereCenter(3))**2)
-        IF (test.LE.sphereRadius) THEN
-          refineByGeom = 1
-          RETURN
-        END IF
-      END DO ! i
-    END DO ! j 
-  END DO ! k
-  ! check barycenter
-  test=SQRT((XBaryQuad(1)-sphereCenter(1))**2+(XBaryQuad(2)-sphereCenter(2))**2+(XBaryQuad(3)-sphereCenter(3))**2)
-  IF (test.LE.sphereRadius) THEN
-    refineByGeom = 1
-  ELSE
-    refineByGeom = 0
-  END IF
-
-CASE(11)   ! SPHERE SHELL
-  ! check NGeo Nodes (TODO: supersampling to NSuper for this check)
-  DO k=0,Ngeo
-    DO j=0,Ngeo
-      DO i=0,Ngeo
-        XCorner(:)=XgeoQuad(:,i,j,k)
-        test=SQRT((XCorner(1)-shellCenter(1))**2+(XCorner(2)-shellCenter(2))**2+(XCorner(3)-shellCenter(3))**2)
-        IF ((test.LE.shellRadius_outer) .AND. (test.GE.shellRadius_inner)) THEN
-          refineByGeom = 1
-          RETURN
-        END IF
-      END DO ! i
-    END DO ! j 
-  END DO ! k
-  ! check barycenter
-  test=SQRT((XBaryQuad(1)-shellCenter(1))**2+(XBaryQuad(2)-shellCenter(2))**2+(XBaryQuad(3)-shellCenter(3))**2)
-  IF ((test.LE.shellRadius_outer) .AND. (test.GE.shellRadius_inner)) THEN
-    refineByGeom = 1
-  ELSE
-    refineByGeom = 0
-  END IF
-   
-CASE(2)   ! BOX
-  ! check NGeo Nodes (TODO: supersampling to NSuper for this check)
-  DO k=0,NGeo
-    DO j=0,NGeo
-      DO i=0,NGeo
-        XCorner(:)=XgeoQuad(:,i,j,k)
-        IF (XCorner(1) .GE. boxBoundary(1) .AND. XCorner(1) .LE. boxBoundary(2) .AND. & 
-            XCorner(2) .GE. boxBoundary(3) .AND. XCorner(2) .LE. boxBoundary(4) .AND. &
-            XCorner(3) .GE. boxBoundary(5) .AND. XCorner(3) .LE. boxBoundary(6)) THEN
-          refineByGeom = 1
-          RETURN
-        END IF
-      END DO ! i
-    END DO ! j 
-  END DO ! k
-  ! refineBoundary(xmin,xmax,ymin,ymax,zmin,zmax)
-  IF (XBaryQuad(1) .GE. boxBoundary(1) .AND. XBaryQuad(1) .LE. boxBoundary(2) .AND. & 
-      XBaryQuad(2) .GE. boxBoundary(3) .AND. XBaryQuad(2) .LE. boxBoundary(4) .AND. &
-      XBaryQuad(3) .GE. boxBoundary(5) .AND. XBaryQuad(3) .LE. boxBoundary(6)) THEN
-    refineByGeom = 1
-  END IF
-END SELECT
+END DO
+! check barycenter
+IF (CheckGeom(XBaryElem)) THEN
+  refineByGeom = 1
+  RETURN
+END IF
+! check Nsuper Nodes
+DO k=0,Nsuper
+  DO j=0,Nsuper
+    DO i=0,Nsuper
+      IF (CheckGeom(XGeoSuper(:,i,j,k))) THEN
+        refineByGeom = 1
+        RETURN
+      END IF
+    END DO ! i
+  END DO ! j 
+END DO ! k
 END FUNCTION RefineByGeom
 
+
+FUNCTION CheckGeom(x_in)
+!===================================================================================================================================
+! 
+!===================================================================================================================================
+! MODULES
+USE MODH_Globals,     ONLY: VECNORM
+USE MODH_Refine_Vars, ONLY: refineGeomType
+USE MODH_Refine_Vars, ONLY: sphereCenter,sphereRadius,boxBoundary
+USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
+USE MODH_Refine_Vars, ONLY: cylinderCenter,CylinderAxis,CylinderRadius 
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) ::x_in(3)
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+LOGICAL :: checkGeom
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: test
+!-----------------------------------------------------------------------------------------------------------------------------------
+CheckGeom=.FALSE.
+SELECT CASE (refineGeomType)
+CASE(1)   ! SPHERE
+  test=VECNORM(x_in-SphereCenter)
+  IF (test.LE.sphereRadius) THEN
+    CheckGeom= .TRUE.
+  END IF
+CASE(11) ! sphere shell
+  test=VECNORM(x_in-shellCenter)
+  IF ((test.LE.shellRadius_outer) .AND. (test.GE.shellRadius_inner)) THEN
+    CheckGeom= .TRUE.
+  END IF
+CASE(2) ! box
+  IF (x_in(1) .GE. boxBoundary(1) .AND. x_in(1) .LE. boxBoundary(2) .AND. & 
+      x_in(2) .GE. boxBoundary(3) .AND. x_in(2) .LE. boxBoundary(4) .AND. &
+      x_in(3) .GE. boxBoundary(5) .AND. x_in(3) .LE. boxBoundary(6)) THEN
+    CheckGeom= .TRUE.
+  END IF
+CASE(3)   ! CYLINDER
+  test=VECNORM((x_in-CylinderCenter)-CylinderAxis*SUM(CylinderAxis*(x_in-CylinderCenter)))
+  IF (test.LE.cylinderRadius) THEN
+    CheckGeom= .TRUE.
+  END IF
+END SELECT
+END FUNCTION CheckGeom
 
 FUNCTION RefineFirst(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
@@ -385,7 +396,7 @@ FUNCTION RefineFirst(x,y,z,tree,level,childID) BIND(C)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MOD_Refine_Vars, ONLY: refineLevel
+USE MODH_Refine_Vars, ONLY: refineLevel
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -409,4 +420,4 @@ ELSE
 END IF
 END FUNCTION RefineFirst
 
-END MODULE MOD_Refine
+END MODULE MODH_Refine
