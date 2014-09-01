@@ -443,17 +443,19 @@ REAL,INTENT(INOUT)         :: Face(1:dim1,0:N_in,0:N_in) !Face data, inner point
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                        :: i,j
-REAL                           :: xi(0:N_in),xim(0:N_in)
+REAL                           :: xi0(0:N_in),xiN(0:N_in)
 !-----------------------------------------------------------------------------------------------------------------------------------
 IF(N_in.EQ.1) RETURN
-xi=0.5*(xi_in+1.)  ![-1,1] ->  0...1
-xim=1.-xi          ! 1 ... 0
+xiN=0.5*(xi_in+1.)  ![-1,1] ->  0...1
+xi0=1.-xiN          ! 1 ... 0
 DO j=1,N_in-1
   DO i=1,N_in-1
-     Face(:,i,j)=   Face(:,i,0)*xim(j) + Face(:,i,N_in)*xi(j)                  &
-                   +Face(:,0,j)*xim(i) + Face(:,N_in,j)*xi(i)                  &
-                  -( (Face(:,0,   0)*xim(i) + Face(:,N_in,   0)*xi(i) )*xim(j) &
-                    +(Face(:,0,N_in)*xim(j) + Face(:,N_in,N_in)*xi(j) )*xim(i))
+     Face(:,i,j)=   Face(:,i,0)*xi0(j) + Face(:,i,N_in)*xiN(j)  & !edges
+                   +Face(:,0,j)*xi0(i) + Face(:,N_in,j)*xiN(i)  & 
+                  -(  Face(:,   0,   0)*xi0(i)*xi0(j)          & !-corners
+                    + Face(:,N_in,   0)*xiN(i)*xi0(j)          &
+                    + Face(:,   0,N_in)*xi0(i)*xiN(j)          &
+                    + Face(:,N_in,N_in)*xiN(i)*xiN(j))
   END DO !i
 END DO !j
 END SUBROUTINE TransFace
@@ -478,7 +480,7 @@ REAL,INTENT(INOUT)         :: Vol(1:dim1,0:N_in,0:N_in,0:N_in) !unchanged volume
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                    :: i,j,k
-REAL                       :: xi(0:N_in),xim(0:N_in)
+REAL                       :: xi0(0:N_in),xiN(0:N_in)
 REAL                       :: dVol(1:dim1,0:N_in,0:N_in,0:N_in) !Face data, inner points will be overwritten
 !-----------------------------------------------------------------------------------------------------------------------------------
 IF(N_in.EQ.1) THEN
@@ -489,35 +491,35 @@ END IF
 !difference between new (Vol_in) and old (Vold)
 dVol=Vol_in-Vol !only face data will be used
 
-xi=0.5*(xi_in+1.)  ![-1,1] ->  0...1
-xim=1.-xi          ! 1 ... 0
+xiN=0.5*(xi_in+1.)  ![-1,1] ->  0...1
+xi0=1.-xiN          ! 1 ... 0
 !overwrite inner nodes of dVol by transfinite blending of its faces
 DO k=1,N_in-1
   DO j=1,N_in-1
     DO i=1,N_in-1
-       dVol(:,i,j,k)=  dVol(:,i,j,0)*xim(k)+dVol(:,i,j,N_in)*xi(k)      & !faces
-                      +dVol(:,i,0,k)*xim(j)+dVol(:,i,N_in,k)*xi(j)      &
-                      +dVol(:,0,j,k)*xim(i)+dVol(:,N_in,j,k)*xi(i)      &
-                      -(  dVol(:,   0,   0,   k)*xim(i)*xim(j)          & !-edges
-                        + dVol(:,   0,N_in,   k)*xim(i)* xi(j)          &
-                        + dVol(:,   0,   j,   0)*xim(i)       *xim(k)   &
-                        + dVol(:,   0,   j,N_in)*xim(i)       * xi(k)   &
-                        + dVol(:,N_in,   0,   k)* xi(i)*xim(j)          &
-                        + dVol(:,N_in,N_in,   k)* xi(i)* xi(j)          &
-                        + dVol(:,N_in,   j,   0)* xi(i)       *xim(k)   &
-                        + dVol(:,N_in,   j,N_in)* xi(i)       * xi(k)   &
-                        + dVol(:,   i,   0,   0)       *xim(j)*xim(k)   &
-                        + dVol(:,   i,   0,N_in)       *xim(j)* xi(k)   &
-                        + dVol(:,   i,N_in,   0)       * xi(j)*xim(k)   &
-                        + dVol(:,   i,N_in,N_in)       * xi(j)* xi(k) ) &
-                      +(  dVol(:,   0,   0,   0)*xim(i)*xim(j)*xim(k)   & ! + corners
-                        + dVol(:,   0,   0,N_in)*xim(i)*xim(j)* xi(k)   &
-                        + dVol(:,   0,N_in,   0)*xim(i)* xi(j)*xim(k)   &
-                        + dVol(:,   0,N_in,N_in)*xim(i)* xi(j)* xi(k)   &
-                        + dVol(:,N_in,   0,   0)* xi(i)*xim(j)*xim(k)   &
-                        + dVol(:,N_in,   0,N_in)* xi(i)*xim(j)* xi(k)   &
-                        + dVol(:,N_in,N_in,   0)* xi(i)* xi(j)*xim(k)   &
-                        + dVol(:,N_in,N_in,N_in)* xi(i)* xi(j)* xi(k) )
+       dVol(:,i,j,k)=  dVol(:,i,j,0)*xi0(k)+dVol(:,i,j,N_in)*xiN(k)     & !faces
+                      +dVol(:,i,0,k)*xi0(j)+dVol(:,i,N_in,k)*xiN(j)     &
+                      +dVol(:,0,j,k)*xi0(i)+dVol(:,N_in,j,k)*xiN(i)     &
+                      -(  dVol(:,   0,   0,   k)*xi0(i)*xi0(j)          & !-edges
+                        + dVol(:,   0,N_in,   k)*xi0(i)*xiN(j)          &
+                        + dVol(:,   0,   j,   0)*xi0(i)       *xi0(k)   &
+                        + dVol(:,   0,   j,N_in)*xi0(i)       *xiN(k)   &
+                        + dVol(:,N_in,   0,   k)*xiN(i)*xi0(j)          &
+                        + dVol(:,N_in,N_in,   k)*xiN(i)*xiN(j)          &
+                        + dVol(:,N_in,   j,   0)*xiN(i)       *xi0(k)   &
+                        + dVol(:,N_in,   j,N_in)*xiN(i)       *xiN(k)   &
+                        + dVol(:,   i,   0,   0)       *xi0(j)*xi0(k)   &
+                        + dVol(:,   i,   0,N_in)       *xi0(j)*xiN(k)   &
+                        + dVol(:,   i,N_in,   0)       *xiN(j)*xi0(k)   &
+                        + dVol(:,   i,N_in,N_in)       *xiN(j)*xiN(k) ) &
+                      +(  dVol(:,   0,   0,   0)*xi0(i)*xi0(j)*xi0(k)   & ! + corners
+                        + dVol(:,   0,   0,N_in)*xi0(i)*xi0(j)*xiN(k)   &
+                        + dVol(:,   0,N_in,   0)*xi0(i)*xiN(j)*xi0(k)   &
+                        + dVol(:,   0,N_in,N_in)*xi0(i)*xiN(j)*xiN(k)   &
+                        + dVol(:,N_in,   0,   0)*xiN(i)*xi0(j)*xi0(k)   &
+                        + dVol(:,N_in,   0,N_in)*xiN(i)*xi0(j)*xiN(k)   &
+                        + dVol(:,N_in,N_in,   0)*xiN(i)*xiN(j)*xi0(k)   &
+                        + dVol(:,N_in,N_in,N_in)*xiN(i)*xiN(j)*xiN(k) )
     END DO !i
   END DO !j
 END DO !k
