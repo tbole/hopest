@@ -50,7 +50,8 @@ SUBROUTINE InitMesh()
 USE MODH_Globals
 USE MODH_Output_Vars, ONLY: ProjectName
 USE MODH_Mesh_Vars,   ONLY: MeshFile,Deform
-USE MODH_ReadInTools, ONLY: GETINT,GETSTR,CNTSTR
+USE MODH_Mesh_Vars,   ONLY: doSplineInterpolation
+USE MODH_ReadInTools, ONLY: GETINT,GETSTR,CNTSTR,GETLOGICAL
 IMPLICIT NONE
 ! INPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -74,6 +75,9 @@ ELSE
 END IF
 
 Deform = GETINT('Deform','0')
+
+
+doSplineInterpolation = GETLOGICAL('doSplineInterpolation','.FALSE.')
 
 SWRITE(UNIT_stdOut,'(A)')' INIT MESH DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -171,6 +175,8 @@ SUBROUTINE BuildHOMesh()
 USE MODH_Globals
 USE MODH_Mesh_Vars,   ONLY: Ngeo,nTrees,nElems,Xgeo,XgeoElem
 USE MODH_Mesh_Vars,   ONLY: wBary_Ngeo,xi_Ngeo
+USE MODH_Mesh_Vars,   ONLY: doSplineInterpolation
+USE MODH_Spline1D,    ONLY: GetSplineVandermonde
 USE MODH_P4EST_Vars,  ONLY: QuadToTree,QuadCoords,QuadLevel,sIntSize
 USE MODH_Basis,       ONLY: LagrangeInterpolationPolys 
 USE MODH_ChangeBasis, ONLY: ChangeBasis3D_XYZ 
@@ -216,12 +222,18 @@ DO iElem=1,nElems
   ! length of each quadrant in integers
   length=2./REAL(2**QuadLevel(iElem))
   ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
-  DO i=0,Ngeo_out
-    dxi=0.5*(xiCL_Ngeo_out(i)+1.)*Length
-    CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(i,:)) 
-    CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(i,:)) 
-    CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(i,:)) 
-  END DO
+  IF(doSplineInterpolation)THEN
+    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_xi(:,:)  ,xi0(1)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_eta(:,:) ,xi0(2)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_zeta(:,:),xi0(3)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+  ELSE !polynomials
+    DO i=0,Ngeo_out
+      dxi=0.5*(xiCL_Ngeo_out(i)+1.)*Length
+      CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(i,:)) 
+    END DO
+  END IF
   !interpolate tree HO mapping to quadrant HO mapping (If Ngeo_out < Ngeo: Interpolation error!)
   CALL ChangeBasis3D_XYZ(3,Ngeo,Ngeo_out,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo(:,:,:,:,iTree),XgeoElem(:,:,:,:,iElem))
 END DO !iElem=1,nElems
@@ -299,7 +311,11 @@ DO iElem=1,nElems
         xi0(dir2)=xi0(dir2)-length
       END SELECT !Pmortar
       !extract slice from tree:
-      CALL LagrangeInterpolationPolys(xi0(dir0),Ngeo,xi_Ngeo,wBary_Ngeo,l_1D(:)) 
+      IF(doSplineInterpolation)THEN
+        CALL getSplineVandermonde(Ngeo+1,1,l_1D(:) ,xi0(dir0))
+      ELSE
+        CALL LagrangeInterpolationPolys(xi0(dir0),Ngeo,xi_Ngeo,wBary_Ngeo,l_1D(:)) 
+      END IF
       SELECT CASE(dir0)
       CASE(1)
         XgeoSlice=0.
@@ -319,11 +335,17 @@ DO iElem=1,nElems
       END SELECT !dir0
       !interpolate slice of tree to quadrant big neighbor face (length*2)  EQ (Ngeo) -> CL (Ngeo_out)
       !   build Vdm for interpolation EQ Ngeo -> CL Ngeo_out 
-      DO i=0,Ngeo_out
-        dxi=(xiCL_Ngeo_out(i)+1.)*Length !large element side (length*2)!!
-        CALL LagrangeInterpolationPolys(xi0(dir1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_a(i,:)) 
-        CALL LagrangeInterpolationPolys(xi0(dir2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_b(i,:)) 
-      END DO
+      IF(doSplineInterpolation)THEN
+        CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_a(:,:),xi0(dir1)+(xiCL_Ngeo_out(:)+1.)*Length)
+        CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_b(:,:),xi0(dir2)+(xiCL_Ngeo_out(:)+1.)*Length)
+      ELSE
+        DO i=0,Ngeo_out
+          dxi=(xiCL_Ngeo_out(i)+1.)*Length !large element side (length*2)!!
+          CALL LagrangeInterpolationPolys(xi0(dir1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_a(i,:)) 
+          CALL LagrangeInterpolationPolys(xi0(dir2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_b(i,:)) 
+        END DO
+      END IF
+
       CALL ChangeBasis2D_XY(3,Ngeo,Ngeo_out,Vdm_a,Vdm_b,XGeoSlice(:,:,:),XgeoCLBigFace(:,:,:))
       !transfinite face remap, because big mortar faces will be transfinite too!!
       CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XgeoCLBigFace(:,:,:)) 
@@ -395,7 +417,7 @@ DO iElem=1,nElems
     WRITE(*,*)'WARNING!!! PROBLEMS WITH Ngeo_out'
     WRITE(*,'(A20,12E11.2)')'maxdist',maxdist
     WRITE(*,'(A20,12I11)')'EdgeMarker',EdgeMarker
-    STOP
+    !STOP
   END IF
   
   DO PLocSide=0,5

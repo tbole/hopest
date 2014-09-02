@@ -27,6 +27,8 @@ REAL,ALLOCATABLE  :: XGeo(:,:,:,:,:)             ! High order geometry nodes, pe
 REAL,ALLOCATABLE  :: XGeoElem(:,:,:,:,:)         ! High order geometry nodes, per element (1:3,0:Ngeo,0:Ngeo,0:Ngeo,nElems)
 INTEGER           :: Deform                      ! used for mesh deformations
 LOGICAL           :: setUserBCs=.FALSE.          ! replace HDF5 BCs by those defined in parameter file (only in solver mode)
+LOGICAL           :: doSplineInterpolation       ! instead of polynomial interpolation, equidistant input points of one tree
+                                                 ! are interpolated as splines (no gibbs).
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------

@@ -22,6 +22,8 @@ REAL                             :: sphereCenter(3),sphereRadius
 REAL                             :: cylinderCenter(3),cylinderAxis(3),cylinderRadius
 REAL                             :: shellCenter(3),shellRadius_inner,shellRadius_outer
 REAL                             :: boxBoundary(6)
+REAL                             :: boxSurf_x0(1:3,0:5)
+REAL                             :: boxSurf_n(1:3,0:5)
 !-----------------------------------------------------------------------------------------------------------------------------------
 
 END MODULE MODH_Refine_Vars

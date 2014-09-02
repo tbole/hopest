@@ -21,6 +21,7 @@ libhopest_compiled_sources = \
 	src/mpi/mpi.f90 \
 	src/readintools/isovaryingstring.f90 \
 	src/readintools/readintools.f90 \
+	src/interpolation/spline1d.f90 \
 	src/interpolation/changeBasis.f90 \
 	src/interpolation/basis.f90 \
 	src/p4est/p4est_binding.f90 \

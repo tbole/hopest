@@ -134,6 +134,7 @@ USE MODH_Globals
 USE MODH_Refine_Vars, ONLY: refineGeomType,sphereCenter,sphereRadius,boxBoundary 
 USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
 USE MODH_Refine_Vars, ONLY: cylinderCenter,CylinderAxis,CylinderRadius 
+USE MODH_Refine_Vars, ONLY: BoxSurf_x0,BoxSurf_n
 USE MODH_Readintools, ONLY:GETREALARRAY,GETINT,GETREAL
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -143,6 +144,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+REAL  :: boxC(1:3,0:1,0:1,0:1)
 !===================================================================================================================================
 ! These are the refinement functions which are called by p4est
 refineGeomType =GETINT('refineGeomType') ! 
@@ -162,6 +164,27 @@ SELECT CASE(refineGeomType)
     CylinderAxis =GETREALARRAY('CylinderAxis',3)
     CylinderAxis=CylinderAxis/VECNORM(CylinderAxis)
     CylinderRadius =GETREAL('CylinderRadius')
+  CASE(4) ! 8 corner Box (p4est standard) only planar surfaces!
+    boxC(:,0,0,0)=GETREALARRAY('boxCorner000',3) 
+    boxC(:,1,0,0)=GETREALARRAY('boxCorner100',3) 
+    boxC(:,0,1,0)=GETREALARRAY('boxCorner010',3) 
+    boxC(:,1,1,0)=GETREALARRAY('boxCorner110',3) 
+    boxC(:,0,0,1)=GETREALARRAY('boxCorner001',3) 
+    boxC(:,1,0,1)=GETREALARRAY('boxCorner101',3) 
+    boxC(:,0,1,1)=GETREALARRAY('boxCorner011',3) 
+    boxC(:,1,1,1)=GETREALARRAY('boxCorner111',3) 
+    boxSurf_x0(:,0)=boxC(:,0,0,0)
+    boxSurf_x0(:,2)=boxC(:,0,0,0)
+    boxSurf_x0(:,4)=boxC(:,0,0,0)
+    boxSurf_n(:, 0)=CROSS((boxC(:,0,0,1)-boxC(:,0,0,0)),boxC(:,0,1,0)-boxC(:,0,0,0))
+    boxSurf_n(:, 2)=CROSS((boxC(:,1,0,0)-boxC(:,0,0,0)),boxC(:,0,0,1)-boxC(:,0,0,0))
+    boxSurf_n(:, 4)=CROSS((boxC(:,0,1,0)-boxC(:,0,0,0)),boxC(:,1,0,0)-boxC(:,0,0,0))
+    boxSurf_x0(:,1)=boxC(:,1,1,1)
+    boxSurf_x0(:,3)=boxC(:,1,1,1)
+    boxSurf_x0(:,5)=boxC(:,1,1,1)
+    boxSurf_n(:, 1)=CROSS((boxC(:,1,0,1)-boxC(:,1,1,1)),boxC(:,1,1,0)-boxC(:,1,1,1))
+    boxSurf_n(:, 3)=CROSS((boxC(:,1,1,0)-boxC(:,1,1,1)),boxC(:,0,1,1)-boxC(:,1,1,1))
+    boxSurf_n(:, 5)=CROSS((boxC(:,0,1,1)-boxC(:,1,1,1)),boxC(:,1,0,1)-boxC(:,1,1,1))
   CASE DEFAULT
     STOP 'no refineGeomType defined'
 END SELECT
@@ -255,6 +278,8 @@ USE MODH_Refine_Vars, ONLY: refineLevel
 USE MODH_Refine_Vars, ONLY: NSuper,Xi_Nsuper
 USE MODH_Mesh_Vars,   ONLY: XGeo,Ngeo
 USE MODH_Mesh_Vars,   ONLY: wBary_Ngeo,xi_Ngeo
+USE MODH_Mesh_Vars,   ONLY: doSplineInterpolation
+USE MODH_Spline1D,    ONLY: GetSplineVandermonde
 USE MODH_Basis,       ONLY: LagrangeInterpolationPolys 
 USE MODH_ChangeBasis, ONLY: ChangeBasis3D_XYZ
 ! IMPLICIT VARIABLE HANDLING
@@ -297,22 +322,34 @@ xi0(3)=-1.+2.*REAL(z)*sIntSize
 ! length of the element / quadrant in reference coordinates of its tree [-1,1]
 length=2./REAL(2**level)
 ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
-DO i=0,Nsuper 
-  dxi=0.5*(xi_Nsuper(i)+1.)*Length
-  CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(i,:)) 
-  CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(i,:)) 
-  CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(i,:)) 
-END DO
+IF(doSplineInterpolation)THEN
+  CALL getSplineVandermonde(Ngeo+1,Nsuper+1,Vdm_xi(:,:)  ,xi0(1)+0.5*(xi_Nsuper(:)+1.)*Length)
+  CALL getSplineVandermonde(Ngeo+1,Nsuper+1,Vdm_eta(:,:) ,xi0(2)+0.5*(xi_Nsuper(:)+1.)*Length)
+  CALL getSplineVandermonde(Ngeo+1,Nsuper+1,Vdm_zeta(:,:),xi0(3)+0.5*(xi_Nsuper(:)+1.)*Length)
+ELSE !polynomials
+  DO i=0,Nsuper 
+    dxi=0.5*(xi_Nsuper(i)+1.)*Length
+    CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(i,:)) 
+    CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(i,:)) 
+    CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(i,:)) 
+  END DO
+END IF
 !interpolate tree HO mapping to quadrant HO mapping
 CALL ChangeBasis3D_XYZ(3,Ngeo,Nsuper,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo(:,:,:,:,tree),XGeoSuper(:,:,:,:))
 
 
 ! Barycenter
-xiBary(:)=0.
+xiBary=xi0+0.5*length
 ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
-CALL LagrangeInterpolationPolys(xiBary(1),Ngeo,xi_Ngeo,wBary_Ngeo,l_xi(:)) 
-CALL LagrangeInterpolationPolys(xiBary(2),Ngeo,xi_Ngeo,wBary_Ngeo,l_eta(:)) 
-CALL LagrangeInterpolationPolys(xiBary(3),Ngeo,xi_Ngeo,wBary_Ngeo,l_zeta(:)) 
+IF(doSplineInterpolation)THEN
+  CALL getSplineVandermonde(Ngeo+1,1,l_xi(:)  ,xiBary(1))
+  CALL getSplineVandermonde(Ngeo+1,1,l_eta(:) ,xiBary(2))
+  CALL getSplineVandermonde(Ngeo+1,1,l_zeta(:),xiBary(3))
+ELSE !polynomials
+  CALL LagrangeInterpolationPolys(xiBary(1),Ngeo,xi_Ngeo,wBary_Ngeo,l_xi(:)) 
+  CALL LagrangeInterpolationPolys(xiBary(2),Ngeo,xi_Ngeo,wBary_Ngeo,l_eta(:)) 
+  CALL LagrangeInterpolationPolys(xiBary(3),Ngeo,xi_Ngeo,wBary_Ngeo,l_zeta(:)) 
+END IF
 !interpolate tree HO mapping to quadrant HO mapping
 XBaryElem(:)=0.
 DO k=0,NGeo
@@ -352,6 +389,7 @@ USE MODH_Refine_Vars, ONLY: refineGeomType
 USE MODH_Refine_Vars, ONLY: sphereCenter,sphereRadius,boxBoundary
 USE MODH_Refine_Vars, ONLY: shellRadius_inner,shellRadius_outer,shellCenter
 USE MODH_Refine_Vars, ONLY: cylinderCenter,CylinderAxis,CylinderRadius 
+USE MODH_Refine_Vars, ONLY: BoxSurf_x0,BoxSurf_n
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -362,6 +400,7 @@ REAL,INTENT(IN) ::x_in(3)
 LOGICAL :: checkGeom
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER         :: iSide
 REAL            :: test
 !-----------------------------------------------------------------------------------------------------------------------------------
 CheckGeom=.FALSE.
@@ -387,6 +426,16 @@ CASE(3)   ! CYLINDER
   IF (test.LE.cylinderRadius) THEN
     CheckGeom= .TRUE.
   END IF
+CASE(4)   ! CORNER BOX
+  CheckGeom= .TRUE.
+  DO iSide=0,5
+    test=SUM((x_in(:)-BoxSurf_x0(:,iSide))*boxSurf_n(:,iSide))
+    IF(test.GT.0.)THEN
+      CheckGeom= .FALSE.
+      EXIT
+    END IF
+  END DO
+      
 END SELECT
 END FUNCTION CheckGeom
 
