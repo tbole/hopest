@@ -11,7 +11,7 @@ IMPLICIT NONE
 
 INTERFACE 
 
-  SUBROUTINE p4_initvars() BIND(C)
+  SUBROUTINE p4_initvars(IntSize) BIND(C)
   !=================================================================================================================================
   ! initialize MPI, SC, p4est
   !=================================================================================================================================
@@ -23,6 +23,7 @@ INTERFACE
   ! INPUT VARIABLES
   !---------------------------------------------------------------------------------------------------------------------------------
   ! OUTPUT VARIABLES
+  P4EST_F90_QCOORD,INTENT(OUT) :: intsize ! P4EST_ROOT_LEN -> int2real transform in parameter space, REAL=1/intsize*INT [0,1]
   !=================================================================================================================================
   END SUBROUTINE p4_initvars
   
@@ -217,7 +218,7 @@ INTERFACE
 
 
   SUBROUTINE p4_get_quadrants(p4est,mesh,local_num_quadrants,num_half_faces,&
-                                 intsize,quad_to_tree,quad_to_quad,quad_to_face,quad_to_half,&
+                                 quad_to_tree,quad_to_quad,quad_to_face,quad_to_half,&
                                  quadcoords,quadlevel) BIND(C)
   !=================================================================================================================================
   ! simple refine function, giving the level and if refine_elem < 0 then a conformal refinement is applied.
@@ -234,7 +235,6 @@ INTERFACE
   P4EST_F90_LOCIDX,VALUE       :: num_half_faces
   !---------------------------------------------------------------------------------------------------------------------------------
   ! OUTPUT VARIABLES
-  P4EST_F90_QCOORD,INTENT(OUT) :: intsize ! P4EST_ROOT_LEN -> int2real transform in parameter space, REAL=1/intsize*INT [0,1]
   TYPE(C_PTR),INTENT(OUT)      :: quad_to_tree
   TYPE(C_PTR),INTENT(OUT)      :: quad_to_quad
   TYPE(C_PTR),INTENT(OUT)      :: quad_to_face

@@ -33,7 +33,6 @@ void p4_refine_mesh(p4est_t  *p4est,
                     p4est_geometry_t *geom,
                     p4est_mesh_t  **mesh_out)
 {
-  int                 level;
   int                 balance;
 
 
@@ -42,11 +41,8 @@ void p4_refine_mesh(p4est_t  *p4est,
   
   /* Refine the forest iteratively, load balancing at each iteration.
    * This is important when starting with an unrefined forest */
-  for (level = 0; level < refine_level; ++level) {
-    p4est_refine (p4est, 0, &refine_hopest, NULL);
-    /* Refinement has lead to up to 8x more elements; redistribute them. */
-    p4est_partition (p4est, 0, NULL);
-  }
+  p4est_refine (p4est, 1, &refine_hopest, NULL);
+  p4est_partition (p4est, 0, NULL);
 
   /* If we call the 2:1 balance we ensure that neighbors do not differ in size
    * by more than a factor of 2.  This can optionally include diagonal

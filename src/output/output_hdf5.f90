@@ -104,7 +104,6 @@ DO iElem=1,nElems
   END DO
 END DO
 
-WRITE(*,*)'nSideIDs',nSideIDs
 
 !set unique nodes and Side Indices
 SideID=0
@@ -173,7 +172,6 @@ CALL WriteArrayToHDF5(File_ID,'BCType',nBCs,2,(/nBcs,4/),0,IntegerArray=Boundary
 !-----------------------------------------------------------------
 ! Barycenters
 !-----------------------------------------------------------------
-WRITE(*,*)'WRITE Barycenters'
 
 ALLOCATE(ElemBary(nElems,3))
 DO iElem=1,nElems
@@ -202,7 +200,6 @@ DEALLOCATE(XGeoElem)
 !-----------------------------------------------------------------
 !fill ElementInfo. 
 !-----------------------------------------------------------------
-WRITE(*,*)'WRITE ElemInfo'
 
 ALLOCATE(ElemInfo(1:nElems,ELEM_InfoSize))
 ElemInfo=0
@@ -270,7 +267,6 @@ DEALLOCATE(ElemWeight)
 !-----------------------------------------------------------------
 !fill SideInfo
 !-----------------------------------------------------------------
-WRITE(*,*)'WRITE SideInfo'
 
 ALLOCATE(SideInfo(1:nTotalSides,SIDE_InfoSize)) 
 SideInfo=0 
@@ -324,7 +320,6 @@ DEALLOCATE(SideInfo)
 !-----------------------------------------------------------------
 !fill NodeInfo
 !-----------------------------------------------------------------
-WRITE(*,*)'WRITE NodeInfo'
 
 ! since each element has its own nodes in NodeCoords ( = multiply defined nodes)
 ! thus each element has its own index range, from [ locNodes*(iElem-1)+1 : locNodes*iElem ]

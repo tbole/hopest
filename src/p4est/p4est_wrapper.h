@@ -31,7 +31,7 @@ extern              "C"         /* prevent C++ name mangling */
 #endif
 #endif
 
-void p4_initvars();
+void p4_initvars(p4est_qcoord_t  *intsize);
 
 void p4_loadmesh(char    filename[],
                  p8est_t **p4est_out );
@@ -77,7 +77,6 @@ void p4_get_quadrants( p8est_t       *p4est,
                        p8est_mesh_t   *mesh,
                        p4est_locidx_t local_num_quadrants,
                        p4est_locidx_t   num_half_faces,
-                       p4est_qcoord_t  *intsize,
                        p4est_topidx_t **quad_to_tree,
                        p4est_locidx_t **quad_to_quad,
                        int8_t         **quad_to_face, 

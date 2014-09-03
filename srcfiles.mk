@@ -8,6 +8,7 @@
 ./src/cwrapper/p4est_binding.f90
 ./src/mpi/mpi.f90
 ./src/hopest_c_testi90.f90
+./src/interpolation/spline1d.f90
 ./src/mesh/mesh.f90
 ./src/mesh/meshfromp4est.f90
 ./src/mesh/mesh_refine.f90

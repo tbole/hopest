@@ -154,7 +154,7 @@ CALL SetCurvedInfo()
 CALL ReadAttribute(File_ID,'CurvedFound',1,LogicalScalar=useCurveds)
 
 CALL readBCs()
-IF(hopestMode.EQ.2) CALL setUserBCs()
+CALL setUserBCs()
 CALL CloseDataFile() 
 
 END SUBROUTINE ReadMeshHeader

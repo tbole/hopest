@@ -53,7 +53,7 @@ SUBROUTINE InitP4EST()
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
 USE MODH_Globals,       ONLY: hopestMode
-USE MODH_P4EST_Vars,    ONLY: p4estFile
+USE MODH_P4EST_Vars,    ONLY: p4estFile,IntSize,sIntSize
 USE MODH_P4EST_Binding, ONLY: p4_initvars
 USE MODH_Output_Vars,   ONLY: Projectname
 USE MODH_ReadInTools,   ONLY: GETSTR
@@ -66,8 +66,9 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===================================================================================================================================
-CALL p4_initvars()
+CALL p4_initvars(IntSize)
 p4estFile = GETSTR('p4estFile',TRIM(ProjectName)//'.p4est')
+sIntSize=1./REAL(Intsize)
 
 END SUBROUTINE InitP4EST
 
@@ -119,8 +120,7 @@ QuadCoords=0
 QuadLevel=0
 
 CALL p4_get_quadrants(p4est,mesh,nElems,nHalfFaces,& !IN
-                      intsize,QT,QQ,QF,QH,QuadCoords,QuadLevel)              !OUT
-sIntSize=1./REAL(Intsize)
+                      QT,QQ,QF,QH,QuadCoords,QuadLevel)              !OUT
 
 CALL C_F_POINTER(QT,QuadToTree,(/nElems/))
 CALL C_F_POINTER(QQ,QuadToQuad,(/6,nElems/))
@@ -499,6 +499,8 @@ USE, INTRINSIC :: ISO_C_BINDING
 USE MODH_Globals
 USE MODH_Basis,        ONLY: LagrangeInterpolationPolys
 USE MODH_Mesh_Vars,    ONLY: XGeo,xi_Ngeo,wBary_Ngeo,NGeo
+USE MODH_Mesh_Vars,    ONLY: doSplineInterpolation
+USE MODH_Spline1D,     ONLY: GetSplineVandermonde
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -518,9 +520,15 @@ INTEGER      :: i,j,k
 xi(1)=-1.+2*a
 xi(2)=-1.+2*b
 xi(3)=-1.+2*c
-CALL LagrangeInterpolationPolys(xi(1),Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(:))
-CALL LagrangeInterpolationPolys(xi(2),Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(:))
-CALL LagrangeInterpolationPolys(xi(3),Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(:))
+IF(doSplineInterpolation)THEN
+  CALL getSplineVandermonde(Ngeo+1,1,Vdm_xi(:)  ,xi(1))
+  CALL getSplineVandermonde(Ngeo+1,1,Vdm_eta(:) ,xi(2))
+  CALL getSplineVandermonde(Ngeo+1,1,Vdm_zeta(:),xi(3))
+ELSE
+  CALL LagrangeInterpolationPolys(xi(1),Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(:))
+  CALL LagrangeInterpolationPolys(xi(2),Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(:))
+  CALL LagrangeInterpolationPolys(xi(3),Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(:))
+END IF
 HOabc(:)=0.
 DO k=0,NGeo
   DO j=0,NGeo
