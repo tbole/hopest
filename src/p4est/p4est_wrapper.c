@@ -35,7 +35,7 @@ p8est_connectivity_t *global_conn;
 static sc_MPI_Comm           mpicomm;
 
 // Init p4est 
-void p4_initvars()
+void p4_initvars( p4est_qcoord_t  *intsize)
 {
 
   /* Initialize MPI; see sc_mpi.h.
@@ -48,6 +48,7 @@ void p4_initvars()
    * from processor zero.  Here we turn off most of the logging; see sc.h. */
   sc_init (mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL);
   p4est_init (NULL, SC_LP_PRODUCTION);
+  *intsize = P4EST_ROOT_LEN;
 }
 
 
@@ -239,7 +240,6 @@ void p4_get_quadrants( p4est_t       *p4est,
                        p4est_mesh_t   *mesh,
                        p4est_locidx_t local_num_quadrants,
                        p4est_locidx_t num_half_faces,
-                       p4est_qcoord_t  *intsize,
                        p4est_topidx_t **quad_to_tree,
                        p4est_locidx_t **quad_to_quad,
                        int8_t         **quad_to_face, 
@@ -252,7 +252,6 @@ void p4_get_quadrants( p4est_t       *p4est,
   p8est_quadrant_t   *q;
   sc_array_t         *quadrants;
 
-  *intsize = P4EST_ROOT_LEN;
 
   P4EST_ASSERT (local_num_quadrants == p4est->local_num_quadrants);
   for (iquad = 0; iquad < mesh->local_num_quadrants; iquad++) {

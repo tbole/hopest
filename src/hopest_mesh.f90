@@ -45,6 +45,7 @@ USE MODH_Output_Vars,        ONLY: Projectname
 USE MODH_Output_HDF5,        ONLY: writeMeshToHDF5
 USE MODH_Mesh_ReadIn,        ONLY: ReadMeshFromHDF5,ReadMeshHeader
 USE MODH_Mesh,               ONLY: DeformMesh
+USE MODH_Refine,             ONLY: InitRefine
 USE MODH_Refine,             ONLY: RefineMesh
 IMPLICIT NONE
 ! INPUT VARIABLES
@@ -71,6 +72,8 @@ CALL p4_build_p4est(connectivity,p4est,geom)
 
 
 CALL deformMesh()
+
+CALL InitRefine()
 
 CALL RefineMesh()               ! perform mesh refinement using p4est
 CALL BuildBCs()                 ! store BCs in p4est file

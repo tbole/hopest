@@ -53,7 +53,7 @@ SUBROUTINE InitP4EST()
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
 USE MODH_Globals,       ONLY: hopestMode
-USE MODH_P4EST_Vars,    ONLY: p4estFile
+USE MODH_P4EST_Vars,    ONLY: p4estFile,IntSize,sIntSize
 USE MODH_P4EST_Binding, ONLY: p4_initvars
 USE MODH_Output_Vars,   ONLY: Projectname
 USE MODH_ReadInTools,   ONLY: GETSTR
@@ -66,8 +66,9 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===================================================================================================================================
-CALL p4_initvars()
+CALL p4_initvars(IntSize)
 p4estFile = GETSTR('p4estFile',TRIM(ProjectName)//'.p4est')
+sIntSize=1./REAL(Intsize)
 
 END SUBROUTINE InitP4EST
 
@@ -119,8 +120,7 @@ QuadCoords=0
 QuadLevel=0
 
 CALL p4_get_quadrants(p4est,mesh,nElems,nHalfFaces,& !IN
-                      intsize,QT,QQ,QF,QH,QuadCoords,QuadLevel)              !OUT
-sIntSize=1./REAL(Intsize)
+                      QT,QQ,QF,QH,QuadCoords,QuadLevel)              !OUT
 
 CALL C_F_POINTER(QT,QuadToTree,(/nElems/))
 CALL C_F_POINTER(QQ,QuadToQuad,(/6,nElems/))
