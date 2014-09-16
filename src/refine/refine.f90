@@ -253,18 +253,18 @@ INTEGER               :: iRefine
 refineFunc=0
 DO iRefine=1,nRefines
   aRef=>Refines(iRefine)%rp
-  IF(level.GE. aRef%refineLevel) RETURN
+  IF(level.GE. aRef%refineLevel) CYCLE
   SELECT CASE(aRef%refineType)
   CASE(1) !Refineall
-    refineFunc=1
+    refineFunc=refineFunc+1
   CASE(11) !RefineFirst (Debugging)
     IF(tree.EQ.1)THEN
-      refineFunc=1
+      refineFunc=refineFunc+1
     END IF
   CASE(2)
-    refineFunc=RefineBC(x,y,z,tree,level,aRef%rBC) 
+    refineFunc=refineFunc+RefineBC(x,y,z,tree,level,aRef%rBC) 
   CASE(3)
-    refineFunc=RefineByGeom(x,y,z,tree,level,aRef%rGeo) 
+    refineFunc=refineFunc+RefineByGeom(x,y,z,tree,level,aRef%rGeo) 
   END SELECT
   IF(refineFunc.GT.0) RETURN
 END DO
