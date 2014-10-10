@@ -71,7 +71,7 @@ DO iRefine=1,nRefines
   SELECT CASE(aRef%refineType)
   CASE(1,11)  ! conform refinement of the whole mesh / first element, do nothing
   CASE(2)  ! Boundary Element refinement
-    CALL InitRefineBC(aRef%rBC)
+    CALL InitRefineBC(aRef%rBC,aRef%refineLevel)
   CASE(3) ! Refine by Geometry
     CALL InitRefineGeom(aRef%rGeo)
   CASE DEFAULT
@@ -84,7 +84,7 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitRefine
 
 
-SUBROUTINE InitRefineBC(rBC)
+SUBROUTINE InitRefineBC(rBC,refineLevel)
 !===================================================================================================================================
 ! init the refinment list
 !===================================================================================================================================
@@ -94,11 +94,13 @@ USE MODH_Mesh_Vars,   ONLY: Trees,nTrees
 USE MODH_Mesh_Vars,   ONLY: BoundaryName,nBCs
 USE MODH_Refine_Vars, ONLY: tRefineBC
 USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap
-USE MODH_Readintools, ONLY: GETSTR
+USE MODH_Readintools, ONLY: GETSTR,GETREAL
+USE MODH_p4est_Vars,  ONLY: sIntSize
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: refineLevel 
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 TYPE(tRefineBC),POINTER :: rBC
@@ -131,6 +133,11 @@ DO iTree=1,nTrees
   END DO
 END DO
 
+! set the target length in p4est qcoords
+rBC%targetLength=GETREAL('refineBoundaryThickness','0')
+IF(rBC%targetLength.EQ.0.) THEN  ! only refine in direct neighborhood of the BC
+  rBC%targetLength=2./REAL(2**(refineLevel))
+END IF
 END SUBROUTINE InitRefineBC
 
 
@@ -277,7 +284,7 @@ FUNCTION RefineBC(x,y,z,tree,level,rBC)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MODH_p4est_Vars, ONLY:IntSize
+USE MODH_p4est_Vars, ONLY:IntSize,sIntSize
 USE MODH_Refine_vars,ONLY:tRefineBC
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -292,32 +299,23 @@ TYPE(tRefineBC),POINTER               :: rBC
 INTEGER(KIND=C_INT)      :: refineBC
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-P4EST_F90_QCOORD         :: length
+INTEGER                  :: dir
+REAL                     :: xi(3),length
+!P4EST_F90_QCOORD         :: length
 !-----------------------------------------------------------------------------------------------------------------------------------
 RefineBC=0
-!IF (level.EQ.0) RefineBC=SUM(TreeSidesToRefine(:,tree))
-!IF (level.GE.1) RefineBC=TreeSidesToRefine(childID+1,tree)
-
-length=IntSize/(2**level)
-IF(x.EQ.0) THEN
-  RefineBC=RefineBC+rBC%TreeSidesToRefine(0,tree)
-END IF
-IF(y.EQ.0) THEN
-   RefineBC=RefineBC+rBC%TreeSidesToRefine(2,tree)
-END IF
-IF(z.EQ.0) THEN
-  RefineBC=RefineBC+rBC%TreeSidesToRefine(4,tree)
-END IF
-IF(x.EQ.intSize-length) THEN
-  RefineBC=RefineBC+rBC%TreeSidesToRefine(1,tree)
-END IF
-IF(y.EQ.intSize-length) THEN
-  RefineBC=RefineBC+rBC%TreeSidesToRefine(3,tree)
-END IF
-IF(z.EQ.intSize-length) THEN
-  RefineBC=RefineBC+rBC%TreeSidesToRefine(5,tree)
-END IF
-
+length=1./REAL(2**level)
+xi(1)=REAL(x)*sIntSize
+xi(2)=REAL(y)*sIntSize
+xi(3)=REAL(z)*sIntSize
+DO dir=1,3
+  IF(xi(dir).LT.rBC%targetLength) THEN
+    RefineBC=RefineBC+rBC%TreeSidesToRefine(2*(dir-1),tree)
+  END IF
+  IF((1.-xi(dir)-length).LT.rBC%targetLength) THEN
+    RefineBC=RefineBC+rBC%TreeSidesToRefine(2*(dir-1)+1,tree)
+  END IF
+END DO
 END FUNCTION RefineBC
 
 

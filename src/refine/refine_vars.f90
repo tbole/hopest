@@ -29,6 +29,7 @@ TYPE tRefineBC
   CHARACTER(LEN=255)        :: RefineBoundaryName
   INTEGER                   :: refineBCindex
   INTEGER,ALLOCATABLE       :: TreeSidesToRefine(:,:)
+  REAL                      :: targetLength
 END TYPE tRefineBC
 
 TYPE tRefineGeom 
