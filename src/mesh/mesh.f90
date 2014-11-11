@@ -174,17 +174,20 @@ SUBROUTINE BuildHOMesh()
 ! MODULES
 USE MODH_Globals
 USE MODH_Mesh_Vars,   ONLY: Ngeo,nTrees,nElems,Xgeo,XgeoElem
+USE MODH_Mesh_Vars,   ONLY: nTrees,Trees
 USE MODH_Mesh_Vars,   ONLY: wBary_Ngeo,xi_Ngeo
+USE MODH_Mesh_Vars,   ONLY: wBaryCL_Ngeo_out
 USE MODH_Mesh_Vars,   ONLY: doSplineInterpolation
 USE MODH_Spline1D,    ONLY: GetSplineVandermonde
 USE MODH_P4EST_Vars,  ONLY: QuadToTree,QuadCoords,QuadLevel,sIntSize
-USE MODH_Basis,       ONLY: LagrangeInterpolationPolys 
-USE MODH_ChangeBasis, ONLY: ChangeBasis3D_XYZ 
+USE MODH_Basis,       ONLY: LagrangeInterpolationPolys,InitializeVandermonde
+USE MODH_ChangeBasis, ONLY: ChangeBasis3D, ChangeBasis3D_XYZ 
 USE MODH_ChangeBasis, ONLY: ChangeBasis2D_XY
 USE MODH_Mesh_Vars,   ONLY: Vdm_01,Vdm_10
-USE MODH_Mesh_Vars,   ONLY: Elems
+USE MODH_Mesh_Vars,   ONLY: Elems,BoundaryType
 USE MODH_Mesh_Vars,   ONLY: Ngeo_out,xiCL_Ngeo_out
-USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap,P_FaceToEdge,P_EdgeToFaces
+USE MODH_Mesh_Vars,   ONLY: blending_glob
+USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap,P_FaceToEdge,P_EdgeToFaces,P2H_VertexMap
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -193,258 +196,194 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER                           :: i,iElem,iTree 
 REAL                              :: xi0(3)
 REAL                              :: dxi,length
-REAL,DIMENSION(0:Ngeo_out,0:Ngeo) :: Vdm_xi,Vdm_eta,Vdm_zeta
-INTEGER                           :: i,iElem,iTree 
+REAL,DIMENSION(0:Ngeo_out,0:Ngeo) :: Vdm_Ngeo_NGeo_out
+REAL,DIMENSION(0:Ngeo_out,0:Ngeo_out) :: Vdm_xi,Vdm_eta,Vdm_zeta
+REAL                              :: XGeo_tree(3,0:NGeo_out,0:NGeo_out,0:NGeo_out)
 !-----------------------------------------------------------------------------------------------------------------------------------
-INTEGER                           :: j,k,plus
-INTEGER                           :: dir0,dir1,dir2
-INTEGER                           :: iEdge,PlocSide1,PlocSide2,dirSide1,dirSide2,pos1,pos2
-INTEGER                           :: Pmortar,PlocSide 
+LOGICAL                           :: BCSide(0:5)
+INTEGER                           :: j,k,plus,BCIndex
+INTEGER                           :: Pmortar,PlocSide,PoppSide,nBCs,iNode,NodeSum 
 INTEGER                           :: MortarType(0:5)
-INTEGER                           :: EdgeMarker(0:11)
-LOGICAL                           :: MarkForTrans(0:5)
+INTEGER                           :: dir0
+REAL                              :: PI 
+REAL,DIMENSION(0:Ngeo_out,0:Ngeo) :: Vdm_xi2,Vdm_eta2,Vdm_zeta2
 REAL,DIMENSION(0:Ngeo_out,0:Ngeo) :: Vdm_a,Vdm_b
-REAL                              :: l_1D(0:Ngeo)
-REAL                              :: XgeoSlice(3,0:Ngeo,0:Ngeo)
-REAL                              :: XGeoCLFace(3,0:Ngeo_out,0:Ngeo_out,0:5)
-REAL                              :: XGeoCLVol(3,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out)
-REAL                              :: XgeoCLBigFace(3,0:Ngeo_out,0:Ngeo_out)
-REAL                              :: maxdist(0:11)
+REAL                              :: NodeMark(0:1,0:1,0:1),markTmp,lengthIJK(3),xi0IJK(3),xi(3)
+REAL                              :: xGeoElem_corr(3,0:NGeo_out,0:NGeo_out,0:NGeo_out)
+REAL                              :: blending(0:NGeo_out,0:NGeo_out,0:NGeo_out)
 !===================================================================================================================================
 ALLOCATE(XgeoElem(3,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out,nElems))
+ALLOCATE(blending_glob(1,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out,nElems))
 
 DO iElem=1,nElems
   iTree=QuadToTree(iElem)+1
+  !interpolate tree HO mapping from NGeo to Ngeo_out
+  CALL InitializeVandermonde(Ngeo,Ngeo_out,wBary_Ngeo,xi_Ngeo,xiCL_Ngeo_out,Vdm_Ngeo_Ngeo_out)
+  CALL ChangeBasis3D(3,Ngeo,Ngeo_out,Vdm_Ngeo_Ngeo_out,XGeo(:,:,:,:,iTree),Xgeo_tree)
+
   ! transform p4est first corner coordinates (integer from 0... intsize) to [-1,1] reference element
   xi0(:)=-1.+2.*REAL(QuadCoords(:,iElem))*sIntSize
   ! length of each quadrant in integers
   length=2./REAL(2**QuadLevel(iElem))
   ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
   IF(doSplineInterpolation)THEN
-    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_xi(:,:)  ,xi0(1)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
-    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_eta(:,:) ,xi0(2)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
-    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_zeta(:,:),xi0(3)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo_out+1,Ngeo_out+1,Vdm_xi(:,:)  ,xi0(1)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo_out+1,Ngeo_out+1,Vdm_eta(:,:) ,xi0(2)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo_out+1,Ngeo_out+1,Vdm_zeta(:,:),xi0(3)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
   ELSE !polynomials
     DO i=0,Ngeo_out
       dxi=0.5*(xiCL_Ngeo_out(i)+1.)*Length
-      CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi(i,:)) 
-      CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta(i,:)) 
-      CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo_out,xiCL_Ngeo_out,wBaryCL_Ngeo_out,Vdm_xi(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo_out,xiCL_Ngeo_out,wBaryCL_Ngeo_out,Vdm_eta(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo_out,xiCL_Ngeo_out,wBaryCL_Ngeo_out,Vdm_zeta(i,:)) 
     END DO
   END IF
   !interpolate tree HO mapping to quadrant HO mapping (If Ngeo_out < Ngeo: Interpolation error!)
-  CALL ChangeBasis3D_XYZ(3,Ngeo,Ngeo_out,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo(:,:,:,:,iTree),XgeoElem(:,:,:,:,iElem))
+  CALL ChangeBasis3D_XYZ(3,Ngeo_out,Ngeo_out,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo_tree,XgeoElem(:,:,:,:,iElem))
 END DO !iElem=1,nElems
 
 
-IF((Ngeo_out.GE.Ngeo).OR.(Ngeo.EQ.1)) THEN
-   RETURN
+IF(Ngeo_out.GE.Ngeo) THEN
+  RETURN
 ELSE
-  WRITE(*,*)'!!!!!!!!! WARNING: Ngeo_out<Ngeo: non-conforming interfaces are made watertight!!!!'
+ WRITE(*,*)'!!!!!!!!! WARNING: Correction of the BC surfaces with quad-local mapping!'
 END IF
 ! For Ngeo>1 and Ngeo_out < Ngeo, we need to correct the mortar faces!!
 
+! correction of the BC faces (evaluation of the Ngeo Tree Mapping on Quads and watertight)
+
+!reset the node pointer tmp variable
+DO iTree=1,nTrees
+  DO iNode=1,8
+    Trees(iTree)%ep%Node(iNode)%np%tmp=0
+  END DO! iNode=1,8
+END DO! iTree=1,nTrees
+! mark tree nodes for blending
+DO iTree=1,nTrees
+  DO PlocSide=0,5
+    BCIndex=Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%BCIndex
+    IF(BCIndex.GT.0) THEN
+      DO iNode=1,4
+        Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%Node(iNode)%np%tmp=1
+      END DO! iNode=1,4
+    END IF
+  END DO! PlocSide=0,5
+END DO! iTree=1,nTrees
+
 
 DO iElem=1,nElems
+  IF(QuadLevel(iElem).EQ.0) CYCLE !we dont correct level 0
+  IF(QuadLevel(iElem).GT.1) STOP 'correction only for level 1!!!'
   iTree=QuadToTree(iElem)+1
-  DO PLocSide=0,5
-    MortarType(PlocSide)=Elems(iElem)%ep%Side(P2H_FaceMap(PLocSide))%sp%MortarType
-  END DO !PlocSide
-  IF(SUM(ABS(MortarType)).EQ.0) CYCLE !no mortar sides found
-  !initialize Face Data (equidistant point distribution )
-  XGeoCLVol=XGeoElem(:,:,:,:,iElem)
-  XGeoCLFace(:,:,:,0)=XGeoCLVol(:,       0,:,:)     
-  XGeoCLFace(:,:,:,1)=XGeoCLVol(:,Ngeo_out,:,:)     
-  XGeoCLFace(:,:,:,2)=XGeoCLVol(:,:,       0,:)     
-  XGeoCLFace(:,:,:,3)=XGeoCLVol(:,:,Ngeo_out,:)     
-  XGeoCLFace(:,:,:,4)=XGeoCLVol(:,:,:,       0)     
-  XGeoCLFace(:,:,:,5)=XGeoCLVol(:,:,:,Ngeo_out)     
-  !Mark already sides which are big mortars
-  MarkForTrans=(MortarType.GT.0)  
-  !initialize EdgeMarker
-  EdgeMarker=0
-  DO PLocSide=0,5
-    IF(MortarType(PlocSide).LT.0)THEN  !small mortar face:
-      ! transform p4est first corner coordinates (integer from 0... intsize) to [-1,1] reference element
-      xi0(:)=-1.+2.*REAL(QuadCoords(:,iElem))*sIntSize
-      ! length of each quadrant in integers
-      length=2./REAL(2**(QuadLevel(iElem)))
-      PMortar=-MortarType(PlocSide)-1
-      !edgemarker<10: 1 edge: PlocSide=EdgeMarker-1, 
-      !edgemarker>10: 2edges:PlocSide1=MOD(EdgeMarker,10)-1, PlocSide2=EdgeMarker-10*PlocSide1-1
-      EdgeMarker(P_FaceToEdge(:,PlocSide))=EdgeMarker(P_FaceToEdge(:,PlocSide))*10 + PlocSide+1 
-      SELECT CASE(PlocSide)
-      CASE(0,1) !ximinus,xiplus
-        MarkForTrans(2:5)=.TRUE.
-        plus=PlocSide ! plus=0: minus side, plus=1: plus Side
-        dir0=1
-        dir1=2
-        dir2=3
-      CASE(2,3) !etaminus,etaplus
-        MarkForTrans(0:1)=.TRUE.
-        MarkForTrans(4:5)=.TRUE.
-        plus=PlocSide-2 ! plus=0: minus side, plus=1: plus Side
-        dir0=2
-        dir1=1
-        dir2=3
-      CASE(4,5) !zetaminus,zetaplus
-        MarkForTrans(0:3)=.TRUE.
-        plus=PlocSide-4 !  plus=0: minus side, plus=1: plus Side
-        dir0=3
-        dir1=1
-        dir2=2
-      END SELECT !PlocSide
-      !position of origin of mortar side in tree
-      xi0(dir0)=xi0(dir0)+plus*length
-      !position of origin of big (neighbor) mortar side in tree
-      SELECT CASE(PMortar)
-      CASE(0)! lower left
-        !xi0(dir1),xi0(dir2) same
-      CASE(1)! lower right
-        xi0(dir1)=xi0(dir1)-length
-      CASE(2)! upper left 
-        xi0(dir2)=xi0(dir2)-length
-      CASE(3)! upper right 
-        xi0(dir1)=xi0(dir1)-length
-        xi0(dir2)=xi0(dir2)-length
-      END SELECT !Pmortar
-      !extract slice from tree:
-      IF(doSplineInterpolation)THEN
-        CALL getSplineVandermonde(Ngeo+1,1,l_1D(:) ,xi0(dir0))
-      ELSE
-        CALL LagrangeInterpolationPolys(xi0(dir0),Ngeo,xi_Ngeo,wBary_Ngeo,l_1D(:)) 
-      END IF
-      SELECT CASE(dir0)
-      CASE(1)
-        XgeoSlice=0.
-        DO i=0,Ngeo
-          XgeoSlice(:,:,:)=XgeoSlice(:,:,:)+l_1D(i)*Xgeo(:,i,:,:,iTree)
-        END DO 
-      CASE(2)
-        XgeoSlice=0.
-        DO j=0,Ngeo
-          XgeoSlice(:,:,:)=XgeoSlice(:,:,:)+l_1D(j)*Xgeo(:,:,j,:,iTree)
-        END DO 
-      CASE(3)
-        XgeoSlice=0.
-        DO k=0,Ngeo
-          XgeoSlice(:,:,:)=XgeoSlice(:,:,:)+l_1D(k)*Xgeo(:,:,:,k,iTree)
-        END DO 
-      END SELECT !dir0
-      !interpolate slice of tree to quadrant big neighbor face (length*2)  EQ (Ngeo) -> CL (Ngeo_out)
-      !   build Vdm for interpolation EQ Ngeo -> CL Ngeo_out 
-      IF(doSplineInterpolation)THEN
-        CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_a(:,:),xi0(dir1)+(xiCL_Ngeo_out(:)+1.)*Length)
-        CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_b(:,:),xi0(dir2)+(xiCL_Ngeo_out(:)+1.)*Length)
-      ELSE
-        DO i=0,Ngeo_out
-          dxi=(xiCL_Ngeo_out(i)+1.)*Length !large element side (length*2)!!
-          CALL LagrangeInterpolationPolys(xi0(dir1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_a(i,:)) 
-          CALL LagrangeInterpolationPolys(xi0(dir2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_b(i,:)) 
-        END DO
-      END IF
-
-      CALL ChangeBasis2D_XY(3,Ngeo,Ngeo_out,Vdm_a,Vdm_b,XGeoSlice(:,:,:),XgeoCLBigFace(:,:,:))
-      !transfinite face remap, because big mortar faces will be transfinite too!!
-      CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XgeoCLBigFace(:,:,:)) 
-      ! interplation to small face 
-      SELECT CASE(PMortar)
-      CASE(0)! lower left [-1,1]^2 -> [-1,0]x[-1,0]
-        CALL ChangeBasis2D_XY(3,Ngeo_out,Ngeo_out,Vdm_10,Vdm_10,XgeoCLBigFace(:,:,:),XGeoCLFace(:,:,:,PlocSide))
-      CASE(1)! lower right [-1,1]^2 -> [1,0]x[-1,0]
-        CALL ChangeBasis2D_XY(3,Ngeo_out,Ngeo_out,Vdm_01,Vdm_10,XgeoCLBigFace(:,:,:),XGeoCLFace(:,:,:,PlocSide))
-      CASE(2)! upper left [-1,1]^2 -> [-1,0]x[0,1]
-        CALL ChangeBasis2D_XY(3,Ngeo_out,Ngeo_out,Vdm_10,Vdm_01,XgeoCLBigFace(:,:,:),XGeoCLFace(:,:,:,PlocSide))
-      CASE(3)! upper right [-1,1]^2 -> [0,1]x[0,1] 
-        CALL ChangeBasis2D_XY(3,Ngeo_out,Ngeo_out,Vdm_01,Vdm_01,XgeoCLBigFace(:,:,:),XGeoCLFace(:,:,:,PlocSide))
-      END SELECT !Pmortar
-      !copy modified faces into volume (produces unique edges)
-      SELECT CASE(PlocSide)
-      CASE(0)
-        XGeoCLVol(:,       0,:,:)=XGeoCLFace(:,:,:,0)     
-      CASE(1)
-        XGeoCLVol(:,Ngeo_out,:,:)=XGeoCLFace(:,:,:,1)     
-      CASE(2)
-        XGeoCLVol(:,:,       0,:)=XGeoCLFace(:,:,:,2)     
-      CASE(3)
-        XGeoCLVol(:,:,Ngeo_out,:)=XGeoCLFace(:,:,:,3)     
-      CASE(4)
-        XGeoCLVol(:,:,:,       0)=XGeoCLFace(:,:,:,4)     
-      CASE(5)
-        XGeoCLVol(:,:,:,Ngeo_out)=XGeoCLFace(:,:,:,5)     
-      END SELECT !PlocSide
-    END IF !smallmortarSide
-  END DO !PlocSide=0,5
-
-
-  !Check if edges are really unique
-  maxdist=-1.
-  DO iEdge=0,11
-    Plocside1=P_EdgeToFaces(1,iEdge)              ! first adjacent local side
-    dirside1 =P_EdgeToFaces(2,iEdge)              ! 0: i, 1: j
-    pos1     =P_EdgeToFaces(3,iEdge)*NGeo_out     ! 0: 0, 1: N
-    Plocside2=P_EdgeToFaces(4,iEdge)              ! second adjacent local side
-    dirside2 =P_EdgeToFaces(5,iEdge)              ! 0: i, 1: j
-    pos2     =P_EdgeToFaces(6,iEdge)*NGeo_out     ! 0: 0, 1: N
-    IF(EdgeMarker(iEdge).GT.10)THEN
-      IF(dirside1.EQ.0)THEN !first side in i
-        IF(dirside2.EQ.0)THEN !second side in i
-           maxdist(iEdge)=MAXVAL( (XGeoCLFace(1,pos1,:,PlocSide1)-XGeoCLFace(1,pos2,:,PlocSide2))**2 &    
-                                 +(XGeoCLFace(2,pos1,:,PlocSide1)-XGeoCLFace(2,pos2,:,PlocSide2))**2 &
-                                 +(XGeoCLFace(3,pos1,:,PlocSide1)-XGeoCLFace(3,pos2,:,PlocSide2))**2)
-        ELSE !second side in j
-           maxdist(iEdge)=MAXVAL( (XGeoCLFace(1,pos1,:,PlocSide1)-XGeoCLFace(1,:,pos2,PlocSide2))**2 &    
-                                 +(XGeoCLFace(2,pos1,:,PlocSide1)-XGeoCLFace(2,:,pos2,PlocSide2))**2 &
-                                 +(XGeoCLFace(3,pos1,:,PlocSide1)-XGeoCLFace(3,:,pos2,PlocSide2))**2)
-        END IF
-      ELSE !dirside1=1 ->  first side in j
-        IF(dirside2.EQ.0)THEN !second side in i
-           maxdist(iEdge)=MAXVAL( (XGeoCLFace(1,:,pos1,PlocSide1)-XGeoCLFace(1,pos2,:,PlocSide2))**2 &    
-                                 +(XGeoCLFace(2,:,pos1,PlocSide1)-XGeoCLFace(2,pos2,:,PlocSide2))**2 &
-                                 +(XGeoCLFace(3,:,pos1,PlocSide1)-XGeoCLFace(3,pos2,:,PlocSide2))**2)
-        ELSE !second side in j                       
-           maxdist(iEdge)=MAXVAL( (XGeoCLFace(1,:,pos1,PlocSide1)-XGeoCLFace(1,:,pos2,PlocSide2))**2 &    
-                                 +(XGeoCLFace(2,:,pos1,PlocSide1)-XGeoCLFace(2,:,pos2,PlocSide2))**2 &
-                                 +(XGeoCLFace(3,:,pos1,PlocSide1)-XGeoCLFace(3,:,pos2,PlocSide2))**2)
-        END IF
+  nBCs=0
+  ! check if we need to correct the tree
+  NodeSum=0
+  DO iNode=1,8
+    NodeSum=NodeSum+Trees(iTree)%ep%Node(iNode)%np%tmp
+  END DO! iNode=1,8
+  IF(NodeSum.EQ.0) CYCLE
+  ! check if the tree has a BC side
+  BCSide=.FALSE.
+  DO PlocSide=0,5
+    BCIndex=Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%BCIndex
+    IF (BCIndex.NE.0) THEN 
+      IF (BoundaryType(BCIndex,1).NE.1) THEN ! we dont want to correct periodic BC
+        BCSide(PlocSide)=.TRUE.
+        nBCs=nBCs+1
       END IF
     END IF
-  END DO !iEdge
-  
-  IF(ANY(maxDist(:).GT.1.0E-15))THEN
-    WRITE(*,*)'WARNING!!! PROBLEMS WITH Ngeo_out'
-    WRITE(*,'(A20,12E11.2)')'maxdist',maxdist
-    WRITE(*,'(A20,12I11)')'EdgeMarker',EdgeMarker
-    !STOP
+    MortarType(PlocSide)=Elems(iElem)%ep%Side(P2H_FaceMap(PLocSide))%sp%MortarType
+  END DO
+
+  ! interpolate the HO volume mapping from tree level+Ngeo to quad level+Ngeo_out
+  xi0(:)=-1.+2.*REAL(QuadCoords(:,iElem))*sIntSize
+  ! length of each quadrant in integers
+  length=2./REAL(2**QuadLevel(iElem))
+  ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
+  IF(doSplineInterpolation)THEN
+    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_xi2(:,:)  ,xi0(1)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_eta2(:,:) ,xi0(2)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+    CALL getSplineVandermonde(Ngeo+1,Ngeo_out+1,Vdm_zeta2(:,:),xi0(3)+0.5*(xiCL_Ngeo_out(:)+1.)*Length)
+  ELSE !polynomials
+    DO i=0,Ngeo_out
+      dxi=0.5*(xiCL_Ngeo_out(i)+1.)*Length
+      CALL LagrangeInterpolationPolys(xi0(1) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_xi2(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(2) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_eta2(i,:)) 
+      CALL LagrangeInterpolationPolys(xi0(3) + dxi,Ngeo,xi_Ngeo,wBary_Ngeo,Vdm_zeta2(i,:)) 
+    END DO
   END IF
-  
+  !interpolate tree HO mapping on quadrant at Ngeo_out
+  CALL ChangeBasis3D_XYZ(3,Ngeo,Ngeo_out,Vdm_xi2,Vdm_eta2,Vdm_zeta2,XGeo(:,:,:,:,iTree),xGeoElem_corr)
+
+
+  ! generate the blending function based on the previously marked nodes and the mortar status of the faces
+  nodeMark=0.
+  lengthIJK=length
+  xi0IJK=xi0
+  iNode=0
+  DO k=0,1
+    DO j=0,1
+      DO i=0,1
+        nodeMark(i,j,k)= REAL(Trees(iTree)%ep%Node(P2H_VertexMap(iNode))%np%tmp)
+        iNode=iNode+1
+      END DO! i=0,1
+    END DO! j=0,1
+  END DO! k=0,1
+
   DO PLocSide=0,5
-    IF(MortarType(PlocSide).GE.0)THEN  !remaining faces: tranfinite mapping
-      IF(MarkForTrans(PlocSide)) THEN
-        !transfinite face remap!!
-        SELECT CASE(PlocSide)
-        CASE(0)
-          CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XGeoCLVol(:,       0,:,:))     
-        CASE(1)
-          CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XGeoCLVol(:,Ngeo_out,:,:))     
-        CASE(2)
-          CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XGeoCLVol(:,:,       0,:))     
-        CASE(3)
-          CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XGeoCLVol(:,:,Ngeo_out,:))     
-        CASE(4)
-          CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XGeoCLVol(:,:,:,       0))     
-        CASE(5)
-          CALL TransFace(3,Ngeo_out,xiCL_Ngeo_out,XGeoCLVol(:,:,:,Ngeo_out))     
-        END SELECT !PlocSide
-      END IF
-    END IF !mortarSide
-  END DO !PlocSide=0,5
-  CALL TransVol(3,Ngeo_out,XiCL_Ngeo_out,XGeoCLVol,XgeoElem(:,:,:,:,iElem))
+    plus=MOD(PlocSide,2) ! plus=0: minus side, plus=1: plus Side 
+    PoppSide=PlocSide +1 - 2*plus
+    IF((MortarType(PlocSide).LT.0) .AND. (.NOT.BCSide(PoppSide)))THEN
+      SELECT CASE(PlocSide)
+        CASE(0,1) !ximinus,xiplus
+          nodeMark(plus,:,:)=0.
+          lengthIJK(1)=2.
+          xi0IJK(1)   =-1.
+        CASE(2,3) !etaminus,etaplus
+          nodeMark(:,plus,:)=0.
+          lengthIJK(2)=2.
+          xi0IJK(2)   =-1.
+        CASE(4,5) !zetaminus,zetaplus
+          nodeMark(:,:,plus)=0.
+          lengthIJK(3)=2.
+          xi0IJK(3)   =-1.
+      END SELECT !PlocSide
+    END IF!(BCSide(PlocSide))
+  END DO! PLocSide=0,5
+
+  ! map the node values to the volume cell
+  ! xi is in [0,1] within the tree (BC dir) and in[0,1] within the element (smallMortarDir...)
+  DO k=0,NGeo_out
+    xi(3)=0.5*(1.+ xi0IJK(3) +lengthIJK(3)*0.5*(1.+xiCL_NGeo_out(k)))
+    DO j=0,NGeo_out
+      xi(2)=0.5*(1.+ xi0IJK(2) +lengthIJK(2)*0.5*(1.+xiCL_NGeo_out(j)))
+      DO i=0,NGeo_out
+        xi(1)=0.5*(1.+ xi0IJK(1) +lengthIJK(1)*0.5*(1.+xiCL_NGeo_out(i)))
+        blending(i,j,k)=nodeMark(0,0,0)*(1.-xi(1))*(1.-xi(2))*(1.-xi(3))  &
+                       +nodeMark(1,0,0)*xi(1)     *(1.-xi(2))*(1.-xi(3))  &
+                       +nodeMark(0,1,0)*(1.-xi(1))*xi(2)     *(1.-xi(3))  &
+                       +nodeMark(1,1,0)*xi(1)     *xi(2)     *(1.-xi(3))  &
+                       +nodeMark(0,0,1)*(1.-xi(1))*(1.-xi(2))*xi(3)       &
+                       +nodeMark(1,0,1)*xi(1)     *(1.-xi(2))*xi(3)       &
+                       +nodeMark(0,1,1)*(1.-xi(1))*xi(2)     *xi(3)       &
+                       +nodeMark(1,1,1)*xi(1)     *xi(2)     *xi(3)        
+      END DO! i=0,NGeo_out
+    END DO! j=0,NGeo_out
+  END DO! k=0,NGeo_out
+  blending_glob(1,:,:,:,iElem)=blending
+
+  ! blend the HO mapping with the old LO mapping
+  DO i=1,3 
+    xGeoElem(i,:,:,:,iElem)=xGeoElem(i,:,:,:,iElem)*(1.-blending(:,:,:))&
+                           +xGeoElem_corr(i,:,:,:)*blending(:,:,:)
+  END DO! i=1,3 
 END DO !iElem=1,nElems
 
 END SUBROUTINE BuildHOMesh
+
 
 
 SUBROUTINE TransFace(dim1,N_in,xi_in,Face)
@@ -511,7 +450,8 @@ IF(N_in.EQ.1) THEN
 END IF
 !now N_in>1
 !difference between new (Vol_in) and old (Vold)
-dVol=Vol_in-Vol !only face data will be used
+!dVol=Vol_in-Vol !only face data will be used
+Vol=Vol_in
 
 xiN=0.5*(xi_in+1.)  ![-1,1] ->  0...1
 xi0=1.-xiN          ! 1 ... 0
@@ -519,34 +459,34 @@ xi0=1.-xiN          ! 1 ... 0
 DO k=1,N_in-1
   DO j=1,N_in-1
     DO i=1,N_in-1
-       dVol(:,i,j,k)=  dVol(:,i,j,0)*xi0(k)+dVol(:,i,j,N_in)*xiN(k)     & !faces
-                      +dVol(:,i,0,k)*xi0(j)+dVol(:,i,N_in,k)*xiN(j)     &
-                      +dVol(:,0,j,k)*xi0(i)+dVol(:,N_in,j,k)*xiN(i)     &
-                      -(  dVol(:,   0,   0,   k)*xi0(i)*xi0(j)          & !-edges
-                        + dVol(:,   0,N_in,   k)*xi0(i)*xiN(j)          &
-                        + dVol(:,   0,   j,   0)*xi0(i)       *xi0(k)   &
-                        + dVol(:,   0,   j,N_in)*xi0(i)       *xiN(k)   &
-                        + dVol(:,N_in,   0,   k)*xiN(i)*xi0(j)          &
-                        + dVol(:,N_in,N_in,   k)*xiN(i)*xiN(j)          &
-                        + dVol(:,N_in,   j,   0)*xiN(i)       *xi0(k)   &
-                        + dVol(:,N_in,   j,N_in)*xiN(i)       *xiN(k)   &
-                        + dVol(:,   i,   0,   0)       *xi0(j)*xi0(k)   &
-                        + dVol(:,   i,   0,N_in)       *xi0(j)*xiN(k)   &
-                        + dVol(:,   i,N_in,   0)       *xiN(j)*xi0(k)   &
-                        + dVol(:,   i,N_in,N_in)       *xiN(j)*xiN(k) ) &
-                      +(  dVol(:,   0,   0,   0)*xi0(i)*xi0(j)*xi0(k)   & ! + corners
-                        + dVol(:,   0,   0,N_in)*xi0(i)*xi0(j)*xiN(k)   &
-                        + dVol(:,   0,N_in,   0)*xi0(i)*xiN(j)*xi0(k)   &
-                        + dVol(:,   0,N_in,N_in)*xi0(i)*xiN(j)*xiN(k)   &
-                        + dVol(:,N_in,   0,   0)*xiN(i)*xi0(j)*xi0(k)   &
-                        + dVol(:,N_in,   0,N_in)*xiN(i)*xi0(j)*xiN(k)   &
-                        + dVol(:,N_in,N_in,   0)*xiN(i)*xiN(j)*xi0(k)   &
-                        + dVol(:,N_in,N_in,N_in)*xiN(i)*xiN(j)*xiN(k) )
+       Vol(:,i,j,k)=  Vol(:,i,j,0)*xi0(k)+Vol(:,i,j,N_in)*xiN(k)     & !faces
+                      +Vol(:,i,0,k)*xi0(j)+Vol(:,i,N_in,k)*xiN(j)     &
+                      +Vol(:,0,j,k)*xi0(i)+Vol(:,N_in,j,k)*xiN(i)     &
+                      -(  Vol(:,   0,   0,   k)*xi0(i)*xi0(j)          & !-edges
+                        + Vol(:,   0,N_in,   k)*xi0(i)*xiN(j)          &
+                        + Vol(:,   0,   j,   0)*xi0(i)       *xi0(k)   &
+                        + Vol(:,   0,   j,N_in)*xi0(i)       *xiN(k)   &
+                        + Vol(:,N_in,   0,   k)*xiN(i)*xi0(j)          &
+                        + Vol(:,N_in,N_in,   k)*xiN(i)*xiN(j)          &
+                        + Vol(:,N_in,   j,   0)*xiN(i)       *xi0(k)   &
+                        + Vol(:,N_in,   j,N_in)*xiN(i)       *xiN(k)   &
+                        + Vol(:,   i,   0,   0)       *xi0(j)*xi0(k)   &
+                        + Vol(:,   i,   0,N_in)       *xi0(j)*xiN(k)   &
+                        + Vol(:,   i,N_in,   0)       *xiN(j)*xi0(k)   &
+                        + Vol(:,   i,N_in,N_in)       *xiN(j)*xiN(k) ) &
+                      +(  Vol(:,   0,   0,   0)*xi0(i)*xi0(j)*xi0(k)   & ! + corners
+                        + Vol(:,   0,   0,N_in)*xi0(i)*xi0(j)*xiN(k)   &
+                        + Vol(:,   0,N_in,   0)*xi0(i)*xiN(j)*xi0(k)   &
+                        + Vol(:,   0,N_in,N_in)*xi0(i)*xiN(j)*xiN(k)   &
+                        + Vol(:,N_in,   0,   0)*xiN(i)*xi0(j)*xi0(k)   &
+                        + Vol(:,N_in,   0,N_in)*xiN(i)*xi0(j)*xiN(k)   &
+                        + Vol(:,N_in,N_in,   0)*xiN(i)*xiN(j)*xi0(k)   &
+                        + Vol(:,N_in,N_in,N_in)*xiN(i)*xiN(j)*xiN(k) )
     END DO !i
   END DO !j
 END DO !k
 !add deformation to volume mapping
-Vol=Vol+dVol  !vol=vol_in is recovered on the faces, inner nodes will be moved by dVol 
+!Vol=Vol+dVol  !vol=vol_in is recovered on the faces, inner nodes will be moved by dVol 
 END SUBROUTINE TransVol
 
 

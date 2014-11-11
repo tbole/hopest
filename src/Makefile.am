@@ -17,6 +17,7 @@ libhopest_compiled_sources = \
 	src/analyze/analyze_vars.f90 \
 	src/p4est/p4est_vars.f90 \
 	src/output/output_vars.f90 \
+	src/output/output_tecplot.f90 \
 	src/refine/refine_vars.f90 \
 	src/mpi/mpi.f90 \
 	src/readintools/isovaryingstring.f90 \

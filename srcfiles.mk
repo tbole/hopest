@@ -19,6 +19,7 @@
 ./src/output/output_hdf5.f90
 ./src/output/output_vars.f90
 ./src/output/output.f90
+./src/output/output_tecplot.f90
 ./src/interpolation/changeBasis.f90
 ./src/interpolation/basis.f90
 ./src/io_hdf5/io_hdf5.f90

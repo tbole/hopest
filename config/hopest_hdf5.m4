@@ -37,10 +37,10 @@ if test "x$$1_WITH_HDF5" != xno ; then
       save_CPPFLAGS="$CPPFLAGS"
       CPPFLAGS="$CPPFLAGS -I$$1_HDF5_INC"
       save_LDFLAGS="$LDFLAGS"
-      LDFLAGS="$LDFLAGS -L$$1_HDF5_LIB"
+      LDFLAGS="$LDFLAGS -L$$1_HDF5_LIB -Ltecplot/tecio-12.0"
     fi
     save_LIBS="$LIBS"
-    LIBS="-lhdf5_hl -lhdf5 -lhdf5_fortran -ldl $LIBS"
+    LIBS="-lhdf5_hl -lhdf5 -lhdf5_fortran -ldl -ltecio -lstdc++ $LIBS"
     HOPEST_COMPILE_LINK_HDF5($1)
   AC_MSG_RESULT([successful])
 else

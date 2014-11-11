@@ -74,6 +74,9 @@ SUBROUTINE Analyze()
 !===================================================================================================================================
 ! MODULES
 USE MODH_Analyze_Vars,ONLY:checkJacobian
+USE MODH_Mesh_Vars,   ONLY:NGeo_out,nElems,blending_glob,xGeoElem
+USE MODH_Output_Vars, ONLY: Projectname
+USE MODH_Tecplot     ,ONLY:WriteDataToTecplotBinary3D
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -82,8 +85,11 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
+CHARACTER(LEN=255) :: VarNames(1)
 !===================================================================================================================================
 IF(CheckJacobian) CALL CheckJac()
+VarNames(1)='blending'
+CALL WriteDataToTecplotBinary3D(Ngeo_out,nElems,1,VarNames,blending_glob,TRIM(ProjectName)//'_Debugmesh.plt',0.,xGeoElem)
 END SUBROUTINE Analyze
 
 
@@ -146,7 +152,7 @@ DO iElem=1,nElems
 END DO !iElem
 
 ! Error Section
-scaledJacTol=1.0E-6
+scaledJacTol=1e-1!1.0E-6
 
 IF(ANY(scaledJac.LE.scaledJacTol))THEN
   OPEN(UNIT=100,FILE='Jacobian_Error.dat',STATUS='UNKNOWN',ACTION='WRITE')
