@@ -31,6 +31,7 @@ SUBROUTINE WriteMeshToHDF5(FileString)
 !===================================================================================================================================
 ! MODULES
 USE MODH_Mesh_Vars
+USE MODH_p4est_Vars,  ONLY:QuadLevel
 USE MODH_IO_HDF5
 USE MODH_HDF5_output
 USE MODH_ChangeBasis, ONLY:ChangeBasis3D
@@ -57,6 +58,7 @@ INTEGER                        :: ElemCounter(11,2)
 INTEGER                        :: nSideIDs,nNodeIDs
 INTEGER                        :: nTotalSides,nTotalNodes
 INTEGER                        :: locnSides,locnNodes,offsetID
+INTEGER                        :: QuadLevel_INT4(nElems) 
 !===================================================================================================================================
 WRITE(*,'(132("~"))')
 WRITE(*,'(A)')' WRITE MESH TO HDF5 FILE... ' // TRIM(FileString) 
@@ -393,7 +395,12 @@ DO iNode=1,8
 END DO
 DEALLOCATE(master)
 
+!WRITE QuadLevel
+QuadLevel_INT4=QuadLevel
+CALL WriteArrayToHDF5(File_ID,'QuadLevel',nElems,1,(/nElems/),0,IntegerArray=QuadLevel_INT4)
 
+!WRITE xi0Elem  
+CALL WriteArrayToHDF5(File_ID,'xi0Elem',3,2,(/3,nElems/),0,RealArray=xi0Elem)
 
 ! Close the file.
 CALL CloseHDF5File()
