@@ -26,7 +26,6 @@ REAL,ALLOCATABLE  :: wBary_NGeo(:)               ! barycentric weights from xi_N
 REAL,ALLOCATABLE  :: XGeo(:,:,:,:,:)             ! High order geometry nodes, per element (1:3,0:Ngeo,0:Ngeo,0:Ngeo,nTrees)
 REAL,ALLOCATABLE  :: XGeoElem(:,:,:,:,:)         ! High order geometry nodes, per element (1:3,0:Ngeo,0:Ngeo,0:Ngeo,nElems)
 REAL,ALLOCATABLE  :: blending_glob(:,:,:,:,:)    ! Blending function for geometry correction
-REAL,ALLOCATABLE  :: xi0Elem(:,:)                ! quad position in tree 
 INTEGER           :: Deform                      ! used for mesh deformations
 LOGICAL           :: setUserBCs=.FALSE.          ! replace HDF5 BCs by those defined in parameter file (only in solver mode)
 LOGICAL           :: doSplineInterpolation       ! instead of polynomial interpolation, equidistant input points of one tree

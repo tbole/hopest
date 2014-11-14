@@ -186,7 +186,7 @@ USE MODH_ChangeBasis, ONLY: ChangeBasis2D_XY
 USE MODH_Mesh_Vars,   ONLY: Vdm_01,Vdm_10
 USE MODH_Mesh_Vars,   ONLY: Elems,BoundaryType
 USE MODH_Mesh_Vars,   ONLY: Ngeo_out,xiCL_Ngeo_out
-USE MODH_Mesh_Vars,   ONLY: blending_glob,xi0Elem
+USE MODH_Mesh_Vars,   ONLY: blending_glob
 USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap,P_FaceToEdge,P_EdgeToFaces,P2H_VertexMap
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -216,10 +216,8 @@ REAL                              :: xGeoElem_corr(3,0:NGeo_out,0:NGeo_out,0:NGe
 REAL                              :: blending(0:NGeo_out,0:NGeo_out,0:NGeo_out)
 !===================================================================================================================================
 ALLOCATE(XgeoElem(3,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out,nElems))
-ALLOCATE(xi0Elem(3,nElems))
 ALLOCATE(blending_glob(1,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out,nElems))
 
-xi0Elem=0.
 DO iElem=1,nElems
   iTree=QuadToTree(iElem)+1
   !interpolate tree HO mapping from NGeo to Ngeo_out
@@ -228,7 +226,6 @@ DO iElem=1,nElems
 
   ! transform p4est first corner coordinates (integer from 0... intsize) to [-1,1] reference element
   xi0(:)=-1.+2.*REAL(QuadCoords(:,iElem))*sIntSize
-  xi0Elem(:,iElem)=xi0
   ! length of each quadrant in integers
   length=2./REAL(2**QuadLevel(iElem))
   ! Build Vandermonde matrices for each parameter range in xi, eta,zeta
@@ -250,9 +247,9 @@ END DO !iElem=1,nElems
 
 
 IF(Ngeo_out.GE.Ngeo) THEN
- RETURN
+  RETURN
 ELSE
- WRITE(*,*)'!!!!!!!!! WARNING: Correction of the BC surfaces with quad-local mapping! Experimental...!'
+ WRITE(*,*)'!!!!!!!!! WARNING: Correction of the BC surfaces with quad-local mapping!'
 END IF
 ! For Ngeo>1 and Ngeo_out < Ngeo, we need to correct the mortar faces!!
 
@@ -268,7 +265,7 @@ END DO! iTree=1,nTrees
 DO iTree=1,nTrees
   DO PlocSide=0,5
     BCIndex=Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%BCIndex
-    IF((BCIndex.EQ.1).OR.(BCIndex.EQ.2))THEN
+    IF(BCIndex.GT.0) THEN
       DO iNode=1,4
         Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%Node(iNode)%np%tmp=1
       END DO! iNode=1,4
@@ -292,9 +289,8 @@ DO iElem=1,nElems
   BCSide=.FALSE.
   DO PlocSide=0,5
     BCIndex=Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%BCIndex
-    IF (BCIndex.GT.0) THEN 
-    IF((BCIndex.EQ.1).OR.(BCIndex.EQ.2))THEN
-    !  IF (BoundaryType(BCIndex,1).NE.1) THEN ! we dont want to correct periodic BC
+    IF (BCIndex.NE.0) THEN 
+      IF (BoundaryType(BCIndex,1).NE.1) THEN ! we dont want to correct periodic BC
         BCSide(PlocSide)=.TRUE.
         nBCs=nBCs+1
       END IF
