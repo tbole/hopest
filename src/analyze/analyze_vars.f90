@@ -11,6 +11,7 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 
 LOGICAL          :: checkJacobian
+LOGICAL          :: doDebugVisu 
 INTEGER          :: Nanalyze
 REAL,ALLOCATABLE :: Vdm_analyze(:,:)
 REAL,ALLOCATABLE :: D_Ngeo_out(:,:)

@@ -50,6 +50,7 @@ REAL,ALLOCATABLE           :: xi(:)
 !===================================================================================================================================
 
 checkJacobian=GETLOGICAL('checkJacobian','T')
+doDebugVisu=GETLOGICAL('doDebugVisu','F')
 
 WRITE(tmpstr,'(I5)')FLOOR(1.5*Ngeo_out)
 Nanalyze=GETINT('Nanalyze',tmpstr)
@@ -73,10 +74,7 @@ SUBROUTINE Analyze()
 ! Basic Analyze initialization. 
 !===================================================================================================================================
 ! MODULES
-USE MODH_Analyze_Vars,ONLY:checkJacobian
-USE MODH_Mesh_Vars,   ONLY:NGeo_out,nElems,blending_glob,xGeoElem
-USE MODH_Output_Vars, ONLY: Projectname
-USE MODH_Tecplot     ,ONLY:WriteDataToTecplotBinary3D
+USE MODH_Analyze_Vars,ONLY:checkJacobian,doDebugVisu
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -85,13 +83,42 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-CHARACTER(LEN=255) :: VarNames(1)
 !===================================================================================================================================
 IF(CheckJacobian) CALL CheckJac()
-VarNames(1)='blending'
-CALL WriteDataToTecplotBinary3D(Ngeo_out,nElems,1,VarNames,blending_glob,TRIM(ProjectName)//'_Debugmesh.plt',0.,xGeoElem)
+IF(doDebugVisu)   CALL DebugVisu()
 END SUBROUTINE Analyze
 
+SUBROUTINE DebugVisu()
+!===================================================================================================================================
+! Basic Analyze initialization. 
+!===================================================================================================================================
+! MODULES
+USE MODH_Globals
+USE MODH_Globals
+USE MODH_Mesh_Vars,   ONLY: NGeo_out,nElems,blending_glob,xGeoElem
+USE MODH_Output_Vars, ONLY: Projectname
+USE MODH_VTK         ,ONLY: WriteDataToVTK3D
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+CHARACTER(LEN=255)                    :: VarNames(1)
+INTEGER                               :: iElem,i
+REAL                                  :: length,dxi
+REAL,DIMENSION(0:Ngeo_out,0:NGeo_out) :: Vdm_xi,Vdm_eta,Vdm_zeta
+REAL                                  :: XGeo_visu(3,0:NGeo_out,0:NGeo_out,0:Ngeo_out,nElems)
+!===================================================================================================================================
+
+WRITE(Unit_StdOut,'(A,A)') ' Writing Debugmesh to Tecplot: ',TRIM(ProjectName)//'_p4est_Debugmesh.plt'
+
+VarNames(1)='blending'
+CALL WriteDataToVTK3D(Ngeo_out,nElems,1,VarNames,xGeoElem,blending_glob,TRIM(ProjectName)//'_p4est_Debugmesh.plt')
+
+END SUBROUTINE DebugVisu
 
 SUBROUTINE CheckJac()
 !===================================================================================================================================

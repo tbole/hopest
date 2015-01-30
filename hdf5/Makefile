@@ -1,5 +1,5 @@
 # set paths and compiler flags
-HDF5_VERSION=1.8.13
+HDF5_VERSION=1.8.14
 
 all: hdf5
 
