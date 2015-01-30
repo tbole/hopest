@@ -113,10 +113,9 @@ REAL,DIMENSION(0:Ngeo_out,0:NGeo_out) :: Vdm_xi,Vdm_eta,Vdm_zeta
 REAL                                  :: XGeo_visu(3,0:NGeo_out,0:NGeo_out,0:Ngeo_out,nElems)
 !===================================================================================================================================
 
-WRITE(Unit_StdOut,'(A,A)') ' Writing Debugmesh to Tecplot: ',TRIM(ProjectName)//'_p4est_Debugmesh.plt'
-
+WRITE(Unit_StdOut,'(A,A)') ' Writing Debugmesh to Tecplot: ',TRIM(ProjectName)//'_p4est_Debugmesh.vtu'
 VarNames(1)='blending'
-CALL WriteDataToVTK3D(Ngeo_out,nElems,1,VarNames,xGeoElem,blending_glob,TRIM(ProjectName)//'_p4est_Debugmesh.plt')
+CALL WriteDataToVTK3D(Ngeo_out,nElems,2,VarNames,xGeoElem,blending_glob,TRIM(ProjectName)//'_p4est_Debugmesh.vtu')
 
 END SUBROUTINE DebugVisu
 

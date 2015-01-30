@@ -217,6 +217,7 @@ REAL                              :: blending(0:NGeo_out,0:NGeo_out,0:NGeo_out)
 !===================================================================================================================================
 ALLOCATE(XgeoElem(3,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out,nElems))
 ALLOCATE(blending_glob(1,0:Ngeo_out,0:Ngeo_out,0:Ngeo_out,nElems))
+blending_glob=0.
 
 DO iElem=1,nElems
   iTree=QuadToTree(iElem)+1
@@ -244,7 +245,6 @@ DO iElem=1,nElems
   !interpolate tree HO mapping to quadrant HO mapping (If Ngeo_out < Ngeo: Interpolation error!)
   CALL ChangeBasis3D_XYZ(3,Ngeo_out,Ngeo_out,Vdm_xi,Vdm_eta,Vdm_zeta,XGeo_tree,XgeoElem(:,:,:,:,iElem))
 END DO !iElem=1,nElems
-
 
 IF(Ngeo_out.GE.Ngeo) THEN
   RETURN
@@ -374,7 +374,6 @@ DO iElem=1,nElems
     END DO! j=0,NGeo_out
   END DO! k=0,NGeo_out
   blending_glob(1,:,:,:,iElem)=blending
-
   ! blend the HO mapping with the old LO mapping
   DO i=1,3 
     xGeoElem(i,:,:,:,iElem)=xGeoElem(i,:,:,:,iElem)*(1.-blending(:,:,:))&
