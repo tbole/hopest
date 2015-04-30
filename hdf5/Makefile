@@ -10,7 +10,7 @@ hdf5:
 		echo "= M A K E   H D F 5                                           =";\
 		echo "===============================================================";\
 		if [ ! -f hdf5-$(HDF5_VERSION).tar.bz2 ] ; then \
-		  wget -N http://www.hdfgroup.org/ftp/HDF5/prev-releases/hdf5-$(HDF5_VERSION)/src/hdf5-$(HDF5_VERSION).tar.bz2 ; \
+		  wget -N http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-$(HDF5_VERSION)/src/hdf5-$(HDF5_VERSION).tar.bz2 ; \
 		fi ; \
 		if [ ! -d hdf5-$(HDF5_VERSION) ] ; then \
 			tar -xvjf hdf5-$(HDF5_VERSION).tar.bz2 1>/dev/null  ; \
