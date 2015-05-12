@@ -167,7 +167,7 @@ CALL WriteAttributeToHDF5(File_ID,'BoundaryOrder',1,IntegerScalar=Ngeo_out+1)
 ! WRITE BC 
 !-----------------------------------------------------------------
 CALL WriteArrayToHDF5(File_ID,'BCNames',nBCs,1,(/nBCs/),0,StrArray=BoundaryName)
-CALL WriteArrayToHDF5(File_ID,'BCType',nBCs,2,(/nBcs,4/),0,IntegerArray=BoundaryType)
+CALL WriteArrayToHDF5(File_ID,'BCType' ,nBCs,2,(/BC_SIZE,nBCs/),0,IntegerArray=BoundaryType)
 
 !-----------------------------------------------------------------
 ! Barycenters
@@ -201,7 +201,7 @@ DEALLOCATE(XGeoElem)
 !fill ElementInfo. 
 !-----------------------------------------------------------------
 
-ALLOCATE(ElemInfo(1:nElems,ELEM_InfoSize))
+ALLOCATE(ElemInfo(1:nElems,ElemInfoSize))
 ElemInfo=0
 Elemcounter=0
 Elemcounter(:,1)=(/104,204,105,115,205,106,116,206,108,118,208/)
@@ -242,7 +242,7 @@ nTotalNodes = iNode
 nTotalSides = iSide
 
 !WRITE ElemInfo,into (1,nElems)  
-CALL WriteArrayToHDF5(File_ID,'ElemInfo',nElems,2,(/nElems,ELEM_InfoSize/),0,IntegerArray=ElemInfo)
+CALL WriteArrayToHDF5(File_ID,'ElemInfo',nElems,2,(/nElems,ElemInfoSize/),0,IntegerArray=ElemInfo)
 
 DEALLOCATE(ElemInfo)
 
@@ -268,7 +268,7 @@ DEALLOCATE(ElemWeight)
 !fill SideInfo
 !-----------------------------------------------------------------
 
-ALLOCATE(SideInfo(1:nTotalSides,SIDE_InfoSize)) 
+ALLOCATE(SideInfo(1:nTotalSides,SideInfoSize)) 
 SideInfo=0 
 iSide=0
 DO iElem=1,nElems
@@ -314,7 +314,7 @@ DO iElem=1,nElems
 END DO !iElem=1,nElems
 
 !WRITE SideInfo,into (1,nTotalSides)   
-CALL WriteArrayToHDF5(File_ID,'SideInfo',nTotalSides,2,(/nTotalSides,SIDE_InfoSize/),0,IntegerArray=SideInfo)
+CALL WriteArrayToHDF5(File_ID,'SideInfo',nTotalSides,2,(/nTotalSides,SideInfoSize/),0,IntegerArray=SideInfo)
 DEALLOCATE(SideInfo)
 
 !-----------------------------------------------------------------

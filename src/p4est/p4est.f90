@@ -216,7 +216,7 @@ DO iElem=1,nElems
     PSide=H2P_FaceMap(iLocSide)
     aSide%BCindex=GET_BCINDEX_FROM_TREE(iTree,iElem,Pside)
     IF((aSide%BCindex.GT.0).AND.(ASSOCIATED(aSide%connection)))THEN !check if still periodic side (could be set to another BC!)
-      IF(BoundaryType(aSide%BCindex,BC_TYPE).GT.1)THEN !if BCtype=0 & 1 should keep their connections!
+      IF(BoundaryType(BC_TYPE,aSide%BCindex).GT.1)THEN !if BCtype=0 & 1 should keep their connections!
         NULLIFY(aSide%connection)
         aSide%flip=0
       END IF

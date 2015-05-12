@@ -90,12 +90,12 @@ LastElemInd = nElems
 ! Get connection between periodic BCs
 PeriodicBCMap=-2
 DO i=1,nBCs
-  IF((BoundaryType(i,BC_TYPE).NE.1)) PeriodicBCMap(i)=-1 ! not periodic
-  IF((BoundaryType(i,BC_TYPE).EQ.1).AND.(BoundaryType(i,BC_ALPHA).GT.0)) PeriodicBCMap(i)=-1 ! slave
-  IF((BoundaryType(i,BC_TYPE).EQ.1).AND.(BoundaryType(i,BC_ALPHA).LT.0))THEN
+  IF((BoundaryType(BC_TYPE,i).NE.1)) PeriodicBCMap(i)=-1 ! not periodic
+  IF((BoundaryType(BC_TYPE,i).EQ.1).AND.(BoundaryType(BC_ALPHA,i).GT.0)) PeriodicBCMap(i)=-1 ! slave
+  IF((BoundaryType(BC_TYPE,i).EQ.1).AND.(BoundaryType(BC_ALPHA,i).LT.0))THEN
     DO j=1,nBCs
-      IF(BoundaryType(j,BC_TYPE).NE.1) CYCLE
-      IF(BoundaryType(j,BC_ALPHA).EQ.(-BoundaryType(i,BC_ALPHA))) PeriodicBCMap(i)=j
+      IF(BoundaryType(BC_TYPE ,j).NE.1) CYCLE
+      IF(BoundaryType(BC_ALPHA,j).EQ.(-BoundaryType(BC_ALPHA,i))) PeriodicBCMap(i)=j
     END DO
   END IF
 END DO

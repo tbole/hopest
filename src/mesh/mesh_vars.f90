@@ -58,7 +58,8 @@ INTEGER          :: SideID_plus_upper   ! upper side ID of array U_plus/GradUx_p
 INTEGER          :: nBCs=0              ! number of BCs in mesh
 INTEGER          :: nUserBCs=0          ! number of BC in inifile
 
-INTEGER          :: nNodes=0            ! SIZE of Nodes pointer array, number of unique nodes
+INTEGER          :: nNodes=0            ! number of nodes in mesh (=nElems*(NGeo+1)**3)
+INTEGER          :: nUniqueNodes=0      ! number of unique nodes in mesh
 INTEGER          :: nCurvedNodes=0      ! number of curved nodes per element = (Ngeo+1)^3
 !-----------------------------------------------------------------------------------------------------------------------------------
 INTEGER             :: nMortarSides=0      ! 
@@ -113,11 +114,11 @@ END TYPE tSide
 TYPE tNode
   INTEGER                      :: ind=0           ! global unique node index
   INTEGER                      :: tmp=0
-  !REAL                         :: x(3)=0.
+  REAL                         :: x(3)=0.
 END TYPE tNode
 !-----------------------------------------------------------------------------------------------------------------------------------
 TYPE(tElemPtr),POINTER         :: Trees(:)        ! list of tree elements (coarsest level)
-TYPE(tNodePtr),POINTER         :: Nodes(:)
+TYPE(tNodePtr),POINTER         :: UniqueNodes(:)  ! pointer array of unique nodes in mesh
 INTEGER,ALLOCATABLE            :: HexMap(:,:,:)   ! for input: 0:Ngeo,0:Ngeo,0:Ngeo -> i [0;(Ngeo+1)^3]
 INTEGER,ALLOCATABLE            :: HexMapInv(:,:)
 INTEGER,ALLOCATABLE            :: HexMap_out(:,:,:) ! for output 0:Ngeo_out,0:Ngeo_out,0:Ngeo_out -> i [0;(Ngeo_out+1)^3]
@@ -269,7 +270,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER             :: iTree,iElem,iLocSide,iNode,nAssocNodes
+INTEGER             :: iTree,iElem,iLocSide,iNode
 TYPE(tElem),POINTER :: aTree,aElem
 TYPE(tSide),POINTER :: aSide
 !===================================================================================================================================
@@ -283,14 +284,12 @@ IF(ASSOCIATED(Trees))THEN
     DEALLOCATE(aTree)
   END DO
   DEALLOCATE(Trees)
-  nAssocNodes=0
-  DO iNode=1,nNodes
-    IF(ASSOCIATED(Nodes(iNode)%np))THEN
-      DEALLOCATE(Nodes(iNode)%np)
-      nAssocNodes=nAssocNodes+1
+  DO iNode=1,nUniqueNodes
+    IF(ASSOCIATED(UniqueNodes(iNode)%np))THEN
+      DEALLOCATE(UniqueNodes(iNode)%np)
     END IF
   END DO
-  DEALLOCATE(Nodes)
+  DEALLOCATE(UniqueNodes)
 END IF
 IF(ASSOCIATED(Elems))THEN
   DO iElem=1,nElems

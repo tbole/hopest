@@ -34,6 +34,7 @@
 #define ERRWRITE(a,b) CALL CreateErrFile(); WRITE(UNIT_errOut,b)
 #define LOGWRITE(a,b) IF(Logging) WRITE(UNIT_logOut,b)
 #define SDEALLOCATE(A) IF(ALLOCATED(A)) DEALLOCATE(A)
+#define ADEALLOCATE(A) IF(ASSOCIATED(A)) DEALLOCATE(A)
 
 ! Predefined "PARAMETER-like" variables
 
@@ -45,7 +46,7 @@
 #define BC_ALPHA  4
 
 !entry positions in ElemInfo 
-#define ELEM_InfoSize     6        /*number of entry in each line of ElemInfo*/
+#define ElemInfoSize      6        /*number of entry in each line of ElemInfo*/
 #define ELEM_Type         1        /*entry position in ElemInfo */
 #define ELEM_Zone         2           
 #define ELEM_FirstSideInd 3
@@ -54,11 +55,12 @@
 #define ELEM_LastNodeInd  6
 
 !entry positions in SideInfo 
-#define SIDE_InfoSize     4        /*number of entry in each line of SideInfo*/
+#define SideInfoSize      5        /*number of entry in each line of SideInfo*/
 #define SIDE_Type         1         /*entry position in SideInfo */
 #define SIDE_ID           2
 #define SIDE_nbElemID     3
-#define SIDE_BCID         4
+#define SIDE_Flip         4
+#define SIDE_BCID         5
 
 ! Entry position in SideToElem
 #define S2E_ELEM_ID        1

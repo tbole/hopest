@@ -53,19 +53,19 @@ CALL GetDataSize(File_ID,'BCNames',nDims,HSize)
 nBCs=HSize(1)
 DEALLOCATE(HSize)
 CALL GetDataSize(File_ID,'BCType',nDims,HSize)
-IF(HSize(1).NE.nBCs) STOP 'Problem in readBC'
+IF(HSize(2).NE.nBCs) STOP 'Problem in readBC'
 DEALLOCATE(HSize)
 
 ALLOCATE(BoundaryName(nBCs))
-ALLOCATE(BoundaryType(nBCs,BC_SIZE))
+ALLOCATE(BoundaryType(BC_SIZE,nBCs))
 offset=0
-CALL ReadArray('BCNames',1,(/nBCs/),  Offset,1,StrArray    =BoundaryName)
-CALL ReadArray('BCType' ,2,(/nBCs,4/),Offset,1,IntegerArray=BoundaryType)
+CALL ReadArray('BCNames',1,(/nBCs/),        Offset,1,StrArray    =BoundaryName)
+CALL ReadArray('BCType' ,2,(/BC_SIZE,nBCs/),Offset,1,IntegerArray=BoundaryType)
 
 SWRITE(UNIT_StdOut,'(132("."))')
-SWRITE(Unit_StdOut,'(A,A16,A20,A10,A10,A10,A10)')'BOUNDARY CONDITIONS','|','Name','Type','Curved','State','Alpha'
+SWRITE(UNIT_StdOut,'(A,A16,A20,A9,A9,A9,A9)')'BOUNDARY CONDITIONS','|','Name','Type','Curved','State','Alpha'
 DO iBC=1,nBCs
-  SWRITE(*,'(A,A33,A20,I10,I10,I10,I10)')' |','|',TRIM(BoundaryName(iBC)),BoundaryType(iBC,:)
+  SWRITE(UNIT_StdOut,'(A,A33,A20,I9,I9,I9,I9)')' |','|',TRIM(BoundaryName(iBC)),BoundaryType(:,iBC)
 END DO
 SWRITE(UNIT_StdOut,'(132("."))')
 END SUBROUTINE ReadBCs
@@ -110,10 +110,10 @@ DO iBC=1,nBCs
   DO iUserBC=1,nUserBCs
     IF(INDEX(TRIM(BoundaryNameUser(iUserBC)),TRIM(BoundaryName(iBC))) .NE.0)THEN
       SWRITE(Unit_StdOut,'(A,A)')    ' |     Boundary in HDF file found | ',TRIM(BoundaryName(iBC))
-      SWRITE(Unit_StdOut,'(A,I2,I2)')' |                            was | ',BoundaryType(iBC,1),BoundaryType(iBC,3)
+      SWRITE(Unit_StdOut,'(A,I2,I2)')' |                            was | ',BoundaryType(1,iBC),BoundaryType(3,iBC)
       SWRITE(Unit_StdOut,'(A,I2,I2)')' |                      is set to | ',BoundaryTypeUser(iUserBC,1:2)
-      BoundaryType(iBC,1) = BoundaryTypeUser(iUserBC,1)
-      BoundaryType(iBC,3) = BoundaryTypeUser(iUserBC,2)
+      BoundaryType(BC_TYPE ,iBC) = BoundaryTypeUser(iUserBC,1)
+      BoundaryType(BC_STATE,iBC) = BoundaryTypeUser(iUserBC,2)
     END IF
   END DO
 END DO
@@ -140,18 +140,22 @@ CHARACTER(LEN=*),INTENT(IN)  :: FileString
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER :: BoundaryOrder_mesh
+LOGICAL :: isMesh
 !===================================================================================================================================
+CALL CheckIfMesh(FileString,isMesh)
+IF(.NOT.isMesh) CALL abort(__STAMP__,&
+                           'ERROR: Given file '//TRIM(FileString)//' is no valid mesh file.')
+
 CALL OpenDataFile(FileString,create=.FALSE.,single=.FALSE.)
-CALL GetDataSize(File_ID,'ElemInfo',nDims,HSize)
-nGlobalTrees=HSize(1) !global number of elements
-DEALLOCATE(HSize)
-
-CALL ReadAttribute(File_ID,'BoundaryOrder',1,IntegerScalar=BoundaryOrder_mesh)
-NGeo = BoundaryOrder_mesh-1
+CALL ReadAttribute(File_ID,'nElems',1,IntegerScalar=nGlobalTrees) !global number of elements
+CALL ReadAttribute(File_ID,'Ngeo',1,IntegerScalar=NGeo)
 CALL SetCurvedInfo()
+useCurveds=.TRUE. ! TODO: maybe implement as optional parameter
 
-CALL ReadAttribute(File_ID,'CurvedFound',1,LogicalScalar=useCurveds)
+CALL GetDataSize(File_ID,'NodeCoords',nDims,HSize)
+IF(HSize(2).NE.(NGeo+1)**3*nGlobalTrees) CALL abort(__STAMP__,&
+                      'ERROR: Number of nodes in NodeCoords is not consistent with nTrees and NGeo.')
+DEALLOCATE(HSize)
 
 CALL readBCs()
 CALL setUserBCs()
@@ -174,18 +178,21 @@ USE MODH_P4EST,         ONLY: getHFlip
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-CHARACTER(LEN=*),INTENT(IN)  :: FileString
+CHARACTER(LEN=*),INTENT(IN)    :: FileString
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+REAL,ALLOCATABLE               :: NodeCoordsTmp(:,:,:,:,:)
 INTEGER                        :: i,j,k,l
+INTEGER                        :: FirstElemInd,LastElemInd
+INTEGER                        :: FirstSideInd,LastSideInd
+INTEGER                        :: nbLocSide,offsetSideID
 INTEGER                        :: BCindex
-INTEGER                        :: iTree,ElemID
+INTEGER                        :: iElem,iTree,ElemID
 INTEGER                        :: iNode,jNode,NodeID,SideID
 INTEGER                        :: iLocSide,jLocSide
 INTEGER                        :: iSide
-INTEGER                        :: nCurvedNodes_loc
 LOGICAL                        :: oriented
 INTEGER                        :: nPeriodicSides 
 LOGICAL                        :: fileExists
@@ -193,11 +200,10 @@ LOGICAL                        :: doConnection
 TYPE(tElem),POINTER            :: aElem
 TYPE(tSide),POINTER            :: aSide,bSide
 TYPE(tNode),POINTER            :: aNode
-TYPE(tNodePtr),POINTER         :: ElemCurvedNode(:,:)
 INTEGER,ALLOCATABLE            :: ElemInfo(:,:),SideInfo(:,:),NodeInfo(:)
-REAL,ALLOCATABLE               :: NodeCoords(:,:)
-                               
 INTEGER                        :: nNodeIDs,nSideIDs
+INTEGER,ALLOCATABLE            :: GlobalNodeIDs(:,:,:,:)
+INTEGER                        :: C2V(3,8) ! Volume to 1D corner node mapping
 ! p4est interface
 INTEGER                        :: num_vertices
 INTEGER                        :: num_trees
@@ -213,214 +219,205 @@ IF(.NOT.FileExists)  &
 
 SWRITE(UNIT_stdOut,'(A)')'READ MESH FROM DATA FILE "'//TRIM(FileString)//'" ...'
 SWRITE(UNIT_StdOut,'(132("-"))')
+
+! map variables to use as much of Flexi codebase as possible
+offsetElem=0
+nElems=nGlobalTrees   !local number of Elements 
+nTrees=nGlobalTrees   !local number of Elements 
 ! Open data file
 CALL OpenDataFile(FileString,create=.FALSE.,single=.FALSE.)
+
+!----------------------------------------------------------------------------------------------------------------------------
+!                              NODES
+!----------------------------------------------------------------------------------------------------------------------------
+! Define corner to volume mapping: C2V in CGNS ordering
+C2V(:,1)=(/0,   0,   0   /) 
+C2V(:,2)=(/NGeo,0,   0   /)
+C2V(:,3)=(/NGeo,NGeo,0   /)
+C2V(:,4)=(/0,   NGeo,0   /)
+C2V(:,5)=(/0,   0,   NGeo/)
+C2V(:,6)=(/NGeo,0,   NGeo/)
+C2V(:,7)=(/NGeo,NGeo,NGeo/)
+C2V(:,8)=(/0,   NGeo,NGeo/)
+
+! get unique node mapping
+nNodes=nElems*(NGeo+1)**3
+ALLOCATE(GlobalNodeIDs(0:NGeo,0:NGeo,0:NGeo,nElems))
+ALLOCATE(XGeo(       3,0:NGeo,0:NGeo,0:NGeo,nElems))
+
+CALL ReadArray('GlobalNodeIDs',1,(/nNodes/),offsetElem*(NGeo+1)**3,1,IntegerArray=GlobalNodeIDs)
+CALL ReadArray('NodeCoords',2, (/3,nNodes/),offsetElem*(NGeo+1)**3,2,RealArray=XGeo)
+
+! Unique nodes for elements
+CALL ReadAttribute(File_ID,'nUniqueNodes',1,IntegerScalar=nUniqueNodes)
+ALLOCATE(UniqueNodes(1:nUniqueNodes))
+DO iNode=1,nUniqueNodes
+  NULLIFY(UniqueNodes(iNode)%np)
+END DO
+
+num_vertices=0
+DO iElem=1,nElems
+  DO iNode=1,8
+    i=C2V(1,iNode);j=C2V(2,iNode);k=C2V(3,iNode);
+    l=GlobalNodeIDs(i,j,k,iElem)
+    IF(.NOT.ASSOCIATED(UniqueNodes(l)%np))THEN
+      ALLOCATE(UniqueNodes(l)%np)
+      num_vertices=num_vertices+1
+    END IF
+    UniqueNodes(l)%np%x  =XGeo(:,i,j,k,iElem)
+    UniqueNodes(l)%np%ind=l
+    UniqueNodes(l)%np%tmp=-1
+  END DO
+END DO
+
+! remap to linear mesh, use only corner nodes
+!IF(.NOT.useCurveds)THEN
+!  ALLOCATE(XGeoTmp(3,0:NGeo,0:NGeo,0:NGeo,nElems))
+!  XGeoTmp=XGeo
+!  DEALLOCATE(XGeo)
+!  ALLOCATE(XGeo(3,0:1,0:1,0:1,nElems))
+!  XGeo(:,0,0,0,:)=XGeoTmp(:,0,   0,   0,   :)
+!  XGeo(:,1,0,0,:)=XGeoTmp(:,NGeo,0,   0,   :)
+!  XGeo(:,0,1,0,:)=XGeoTmp(:,0,   NGeo,0,   :)
+!  XGeo(:,1,1,0,:)=XGeoTmp(:,NGeo,NGeo,0,   :)
+!  XGeo(:,0,0,1,:)=XGeoTmp(:,0,   0,   NGeo,:)
+!  XGeo(:,1,0,1,:)=XGeoTmp(:,NGeo,0,   NGeo,:)
+!  XGeo(:,0,1,1,:)=XGeoTmp(:,0,   NGeo,NGeo,:)
+!  XGeo(:,1,1,1,:)=XGeoTmp(:,NGeo,NGeo,NGeo,:)
+!  DEALLOCATE(XGeoTmp)
+!  NGeo=1
+!  nNodes=nElems*(NGeo+1)**3
+!ENDIF
 
 !----------------------------------------------------------------------------------------------------------------------------
 !                              ELEMENTS
 !----------------------------------------------------------------------------------------------------------------------------
 
-nTrees=nGlobalTrees   !local number of Elements 
 !read local ElemInfo from data file
-ALLOCATE(ElemInfo(1:nTrees,ELEM_InfoSize))
-CALL ReadArray('ElemInfo',2,(/nTrees,ELEM_InfoSize/),0,1,IntegerArray=ElemInfo)
+FirstElemInd=offsetElem+1
+LastElemInd=offsetElem+nElems
+ALLOCATE(Trees(                 FirstElemInd:LastElemInd))
+ALLOCATE(ElemInfo(ElemInfoSize,FirstElemInd:LastElemInd))
+CALL ReadArray('ElemInfo',2,(/ElemInfoSize,nElems/),offsetElem,2,IntegerArray=ElemInfo)
 
-ALLOCATE(Trees(1:nTrees))
-
-DO iTree=1,nTrees
-  iSide=ElemInfo(iTree,ELEM_FirstSideInd) !first index -1 in Sideinfo
-  iNode=ElemInfo(iTree,ELEM_FirstNodeInd) !first index -1 in NodeInfo
-  Trees(iTree)%ep=>GETNEWELEM()
-  aElem=>Trees(iTree)%ep
-  aElem%Ind    = iTree
-  aElem%Type   = ElemInfo(iTree,ELEM_Type)
-  aElem%Zone   = ElemInfo(iTree,ELEM_Zone)
-END DO
-
-!----------------------------------------------------------------------------------------------------------------------------
-!                              NODES
-!----------------------------------------------------------------------------------------------------------------------------
-
-!read local Node Info from data file 
-nNodeIDs=ElemInfo(nTrees,ELEM_LastNodeInd)-ElemInfo(1,ELEM_FirstNodeInd)
-ALLOCATE(NodeInfo(1:nNodeIDs))
-CALL ReadArray('NodeInfo',1,(/nNodeIDs/),0,1,IntegerArray=NodeInfo)
-
-ALLOCATE(ElemCurvedNode(nCurvedNodes,nTrees))
-
-CALL GetDataSize(File_ID,'NodeCoords',nDims,HSize)
-nNodes=HSize(1) !global number of unique nodes
-DEALLOCATE(HSize)
-
-ALLOCATE(Nodes(1:nNodes)) ! pointer list, entry is known by NodeCoords
-DO iNode=1,nNodes
-  NULLIFY(Nodes(iNode)%np)
-END DO
-!assign nodes 
-DO iTree=1,nTrees
-  aElem=>Trees(iTree)%ep
-  iNode=ElemInfo(iTree,ELEM_FirstNodeInd) !first index -1 in NodeInfo
-  DO jNode=1,8
-    iNode=iNode+1
-    NodeID=ABS(NodeInfo(iNode))     !global, unique NodeID
-    IF(.NOT.ASSOCIATED(Nodes(NodeID)%np))THEN
-      ALLOCATE(Nodes(NodeID)%np) 
-      Nodes(NodeID)%np%ind=NodeID 
-    END IF
-    aElem%Node(jNode)%np=>Nodes(NodeID)%np
+DO iElem=FirstElemInd,LastElemInd
+  iSide=ElemInfo(ELEM_FirstSideInd,iElem) !first index -1 in Sideinfo
+  Trees(iElem)%ep=>GETNEWELEM()
+  aElem=>Trees(iElem)%ep
+  aElem%Ind    = iElem
+  aElem%Type   = ElemInfo(ELEM_Type,iElem)
+  aElem%Zone   = ElemInfo(ELEM_Zone,iElem)
+  ! WARNING: THIS IS CARTESIAN ORDERING NOT CGNS ORDERING AS IN FLEXI !!!
+  DO iNode=1,8
+    i=C2V(1,iNode);j=C2V(2,iNode);k=C2V(3,iNode);
+    aElem%Node(iNode)%np=>UniqueNodes(GlobalNodeIDs(i,j,k,iElem))%np
   END DO
   CALL createSides(aElem)
-  IF(NGeo.GT.1)THEN
-    nCurvedNodes_loc = ElemInfo(iTree,ELEM_LastNodeInd) - ElemInfo(iTree,ELEM_FirstNodeInd) - 14 ! corner + oriented nodes
-    IF(nCurvedNodes.NE.nCurvedNodes_loc) &
-      CALL abort(__STAMP__, &
-           'Wrong number of curved nodes for hexahedra.')
-    DO i=1,nCurvedNodes
-      iNode=iNode+1
-      NodeID=NodeInfo(iNode) !first oriented corner node
-      IF(.NOT.ASSOCIATED(Nodes(NodeID)%np))THEN
-        ALLOCATE(Nodes(NodeID)%np)
-        Nodes(NodeID)%np%ind=NodeID 
-      END IF
-      ElemCurvedNode(i,iTree)%np=>Nodes(NodeID)%np
-    END DO
-  END IF
 END DO
+
+DEALLOCATE(GlobalNodeIDs)
 
 !----------------------------------------------------------------------------------------------------------------------------
 !                              SIDES
 !----------------------------------------------------------------------------------------------------------------------------
 
-nSideIDs=ElemInfo(nTrees,ELEM_LastSideInd)-ElemInfo(1,ELEM_FirstSideInd)
+offsetSideID=ElemInfo(ELEM_FirstSideInd,FirstElemInd) ! hdf5 array starts at 0-> -1  
+nSideIDs=ElemInfo(ELEM_LastSideInd,LastElemInd)-ElemInfo(ELEM_FirstSideInd,FirstElemInd)
 !read local SideInfo from data file 
-ALLOCATE(SideInfo(1:nSideIDs,SIDE_InfoSize))
-CALL ReadArray('SideInfo',2,(/nSideIDs,SIDE_InfoSize/),0,1,IntegerArray=SideInfo)
+FirstSideInd=offsetSideID+1
+LastSideInd=offsetSideID+nSideIDs
+ALLOCATE(SideInfo(SideInfoSize,FirstSideInd:LastSideInd))
+CALL ReadArray('SideInfo',2,(/SideInfoSize,nSideIDs/),offsetSideID,2,IntegerArray=SideInfo)
 
-DO iTree=1,nTrees
-  aElem=>Trees(iTree)%ep
-  iNode=ElemInfo(iTree,ELEM_LastNodeInd) !first index -1 in NodeInfo
-  iNode=iNode-6
-  iSide=ElemInfo(iTree,ELEM_FirstSideInd) !first index -1 in Sideinfo
-  !build up sides of the element using element Nodes and CGNS standard
+
+DO iElem=FirstElemInd,LastElemInd
+  aElem=>Trees(iElem)%ep
+  iSide=ElemInfo(ELEM_FirstSideInd,iElem) !first index -1 in Sideinfo
+  !build up sides of the element according to CGNS standard
   ! assign flip
   DO iLocSide=1,6
     aSide=>aElem%Side(iLocSide)%sp
     iSide=iSide+1
+    aSide%Elem=>aElem
+    oriented=(Sideinfo(SIDE_ID,iSide).GT.0)
+    aSide%Ind=ABS(SideInfo(SIDE_ID,iSide))
+    IF(oriented)THEN !oriented side
+      aSide%flip=0
+    ELSE !not oriented
+      aSide%flip=MOD(Sideinfo(SIDE_Flip,iSide),10)
+      IF((aSide%flip.LT.0).OR.(aSide%flip.GT.4)) STOP 'NodeID doesnt belong to side'
+    END IF
 
-    ElemID=SideInfo(iSide,SIDE_nbElemID) !IF nbElemID <0, this marks a mortar master side. 
+    ! Check if mortar element
+    ElemID=SideInfo(SIDE_nbElemID,iSide) !IF nbElemID <0, this marks a mortar master side. 
                                          ! The number (-1,-2,-3) is the Type of mortar
     IF(ElemID.LT.0)THEN ! mortar Sides attached!
       CALL abort(__STAMP__, &
            'Only conforming meshes in readin.')
     END IF
-   
-    aSide%Elem=>aElem
-    oriented=(Sideinfo(iSide,SIDE_ID).GT.0)
-    
-    aSide%Ind=ABS(SideInfo(iSide,SIDE_ID))
-    iNode=iNode+1
-    NodeID=NodeInfo(iNode) !first oriented corner node
-    IF(oriented)THEN !oriented side
-      aSide%flip=0
-    ELSE !not oriented
-      DO jNode=1,4
-        IF(aSide%Node(jNode)%np%ind.EQ.ABS(NodeID)) EXIT
-      END DO
-      IF(jNode.GT.4) STOP 'NodeID doesnt belong to side'
-      aSide%flip=jNode
-    END IF
-
   END DO !i=1,locnSides
-END DO !iTree
+END DO !iElem
 
  
 ! build up side connection 
-DO iTree=1,nTrees
-  aElem=>Trees(iTree)%ep
-  iSide=ElemInfo(iTree,ELEM_FirstSideInd) !first index -1 in Sideinfo
+DO iElem=FirstElemInd,LastElemInd
+  aElem=>Trees(iElem)%ep
+  iSide=ElemInfo(ELEM_FirstSideInd,iElem) !first index -1 in Sideinfo
   DO iLocSide=1,6
     aSide=>aElem%Side(iLocSide)%sp
     iSide=iSide+1
-
-    sideID  = ABS(SideInfo(iSide,SIDE_ID))
-    elemID  = SideInfo(iSide,SIDE_nbElemID)
-    BCindex = SideInfo(iSide,SIDE_BCID)
-
+    elemID  = SideInfo(SIDE_nbElemID,iSide)
+    BCindex = SideInfo(SIDE_BCID,iSide)
     doConnection=.TRUE. ! for periodic sides if BC is reassigned as non periodic
     IF(BCindex.NE.0)THEN !BC
       aSide%BCindex = BCindex
-      IF(BoundaryType(aSide%BCindex,BC_TYPE).NE.1)THEN ! Reassignement from periodic to non-periodic
+      IF((BoundaryType(BC_TYPE,aSide%BCindex).NE.1).AND.&
+         (BoundaryType(BC_TYPE,aSide%BCindex).NE.100))THEN ! Reassignement from periodic to non-periodic
         doConnection=.FALSE.
-        aSide%flip  = 0
-        elemID      = 0
+        aSide%flip  =0
       END IF
     ELSE
       aSide%BCindex = 0
     END IF
 
-    IF(.NOT.ASSOCIATED(aSide%connection))THEN
-      IF((elemID.NE.0).AND.doConnection)THEN !connection 
-        IF((elemID.LE.nTrees).AND.(elemID.GE.1))THEN !local connection
-          DO jLocSide=1,6
-            bSide=>Trees(elemID)%ep%Side(jLocSide)%sp
-            IF(bSide%ind.EQ.aSide%ind)THEN
-              aSide%connection=>bSide
-              bSide%connection=>aSide
-              EXIT
-            END IF !bSide%ind.EQ.aSide%ind
-          END DO !jLocSide
-        ELSE !MPI connection
-          CALL abort(__STAMP__, &
-            ' elemID of neighbor not in global Elem list ')
-        END IF
-      END IF
-    END IF !connection associated
+    IF(.NOT.doConnection) CYCLE
+    IF(ASSOCIATED(aSide%connection)) CYCLE
+
+    ! check if neighbor on local proc or MPI connection
+    IF((elemID.LE.LastElemInd).AND.(elemID.GE.FirstElemInd))THEN !local
+      nbLocSide=Sideinfo(SIDE_Flip,iSide)/10
+      IF((nbLocSide.LT.1).OR.(nbLocSide.GT.6))&
+        CALL abort(__STAMP__,'SideInfo: Index of local side must be between 1 and 6!')
+      bSide=>Trees(elemID)%ep%Side(nbLocSide)%sp
+      aSide%connection=>bSide
+      bSide%connection=>aSide
+      IF(bSide%ind.NE.aSide%ind)&
+        CALL abort(__STAMP__,&
+        'SideInfo: Index of side and neighbor side have to be identical!')
+    ELSE !MPI
+#ifdef MPI
+      aSide%connection=>GETNEWSIDE()            
+      aSide%connection%flip=aSide%flip
+      aSide%connection%Elem=>GETNEWELEM()
+      aSide%NbProc = ELEMIPROC(elemID)
+#else
+      CALL abort(__STAMP__, &
+        ' elemID of neighbor not in global Elem list ')
+#endif
+    END IF
   END DO !iLocSide 
-END DO !iTree
+END DO !iElem
 
-DEALLOCATE(ElemInfo,SideInfo,NodeInfo)
-
-! get physical coordinates
-
-ALLOCATE(NodeCoords(nNodes,3))
-
-CALL ReadArray('NodeCoords',2,(/nNodes,3/),0,1,RealArray=NodeCoords)
-
-ALLOCATE(Xgeo(1:3,0:Ngeo,0:Ngeo,0:Ngeo,nTrees))
-IF(Ngeo.EQ.1)THEN !use the corner nodes
-  DO iTree=1,nTrees
-    aElem=>Trees(iTree)%ep
-    Xgeo(:,0,0,0,iTree)=NodeCoords(aElem%Node(1)%np%ind,:)
-    Xgeo(:,1,0,0,iTree)=NodeCoords(aElem%Node(2)%np%ind,:)
-    Xgeo(:,1,1,0,iTree)=NodeCoords(aElem%Node(3)%np%ind,:)
-    Xgeo(:,0,1,0,iTree)=NodeCoords(aElem%Node(4)%np%ind,:)
-    Xgeo(:,0,0,1,iTree)=NodeCoords(aElem%Node(5)%np%ind,:)
-    Xgeo(:,1,0,1,iTree)=NodeCoords(aElem%Node(6)%np%ind,:)
-    Xgeo(:,1,1,1,iTree)=NodeCoords(aElem%Node(7)%np%ind,:)
-    Xgeo(:,0,1,1,iTree)=NodeCoords(aElem%Node(8)%np%ind,:)
- END DO !iTree=1,nTrees
-ELSE
-  DO iTree=1,nTrees
-    aElem=>Trees(iTree)%ep
-    l=0
-    DO k=0,Ngeo; DO j=0,Ngeo; DO i=0,Ngeo
-      l=l+1
-      Xgeo(:,i,j,k,iTree)=NodeCoords(ElemCurvedNode(l,iTree)%np%ind,:)
-    END DO ; END DO ; END DO 
- END DO !iTree=1,nTrees
-END IF
-
-CALL CloseDataFile() 
-
-DEALLOCATE(ElemCurvedNode)
+DEALLOCATE(ElemInfo,SideInfo)
+CALL CloseDataFile()
 
 
-! P4est MESH connectivity (should be replaced by connectivity information ?)
-
+!----------------------------------------------------------------------------------------------------------------------------
+!                  P4EST MESH CONNECTIVITY
+!----------------------------------------------------------------------------------------------------------------------------
+! should be replaced by connectivity information ?
 ! needs unique corner nodes for mesh connectivity
-DO iNode=1,nNodes
-  Nodes(iNode)%np%tmp=-1
-END DO
+
 num_vertices=0
 DO iTree=1,nTrees
   aElem=>Trees(iTree)%ep
@@ -434,15 +431,12 @@ DO iTree=1,nTrees
 END DO !iTree
 
 ALLOCATE(Vertices(3,num_vertices))
-DO iNode=1,nNodes
-  aNode=>Nodes(iNode)%np
-  IF(aNode%tmp.GT.0)THEN
-    Vertices(:,aNode%tmp)=NodeCoords(aNode%ind,:)
+DO iNode=1,nUniqueNodes
+  aNode=>UniqueNodes(iNode)%np
+  IF(ASSOCIATED(aNode))THEN ! only corner nodes are associated
+    IF(aNode%tmp.GT.0) Vertices(:,aNode%tmp)=aNode%x
   END IF
 END DO
-
-
-DEALLOCATE(NodeCoords)
 
 num_trees=nTrees
 ALLOCATE(tree_to_vertex(8,num_trees))
@@ -460,7 +454,7 @@ DO iTree=1,nTrees
   DO iLocSide=1,6
     aSide=>aElem%Side(iLocSide)%sp
     IF(aSide%BCIndex.EQ.0) CYCLE ! NO Boundary Condition
-    IF((BoundaryType(aSide%BCIndex,BC_TYPE).EQ.1).AND.(aSide%flip.EQ.0))THEN !periodic side 
+    IF((BoundaryType(BC_TYPE,aSide%BCIndex).EQ.1).AND.(aSide%flip.EQ.0))THEN !periodic side 
       num_periodics=num_periodics+1
     END IF
   END DO !iLocSide
@@ -482,7 +476,7 @@ IF(num_periodics.GT.0) THEN
     DO iLocSide=1,6
       aSide=>aElem%Side(iLocSide)%sp
       IF(aSide%BCIndex.EQ.0) CYCLE ! NO Boundary Condition
-      IF((BoundaryType(aSide%BCIndex,BC_TYPE).EQ.1).AND.(aSide%flip.EQ.0))THEN !periodic side 
+      IF((BoundaryType(BC_TYPE,aSide%BCIndex).EQ.1).AND.(aSide%flip.EQ.0))THEN !periodic side 
         HFlip=aSide%connection%flip
         iperiodic=iperiodic+1
         bSide=>aSide%connection
@@ -601,8 +595,8 @@ DEALLOCATE(HSize)
 !----------------------------------------------------------------------------------------------------------------------------
 
 !read local ElemInfo from data file
-ALLOCATE(ElemInfo(1:nTrees,ELEM_InfoSize))
-CALL ReadArray('ElemInfo',2,(/nTrees,ELEM_InfoSize/),0,1,IntegerArray=ElemInfo)
+ALLOCATE(ElemInfo(1:nTrees,ElemInfoSize))
+CALL ReadArray('ElemInfo',2,(/nTrees,ElemInfoSize/),0,1,IntegerArray=ElemInfo)
 
 !----------------------------------------------------------------------------------------------------------------------------
 !                              NODES
@@ -647,8 +641,54 @@ END IF
 
 DEALLOCATE(ElemInfo,NodeInfo,NodeCoords)
 
-
 END SUBROUTINE ReadGeoFromHDF5
+
+
+
+SUBROUTINE CheckIfMesh(MeshFile_in,isMeshFile)
+!===================================================================================================================================
+! Check if the file is a mesh file
+!===================================================================================================================================
+! MODULES
+!-----------------------------------------------------------------------------------------------------------------------------------
+USE MODH_HDF5_Input
+IMPLICIT NONE
+! INPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+CHARACTER(LEN=255),INTENT(IN) :: MeshFile_in
+! INPUT/OUTPUT VARIABLES
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+LOGICAL,INTENT(OUT)           :: isMeshFile
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL               :: FileVersion
+INTEGER            :: i,nDataSets
+CHARACTER(LEN=255) :: DataSets(9)
+!===================================================================================================================================
+CALL OpenDataFile(MeshFile_in,create=.FALSE.,single=.FALSE.)
+nDataSets=9
+DataSets(1)= 'BCNames'
+DataSets(2)='BCType'
+DataSets(3)='ElemBarycenters'
+DataSets(4)='ElemCounter'
+DataSets(5)='ElemInfo'
+DataSets(6)='ElemWeight'
+DataSets(7)='NodeCoords'
+DataSets(8)='GlobalNodeIDs'
+DataSets(9)='SideInfo'
+CALL DatasetExists(File_ID,'Version',isMeshFile,attrib=.TRUE.)
+IF(isMeshFile)THEN
+  CALL ReadAttribute(File_ID,'Version',1,RealScalar=FileVersion)
+  IF(FileVersion.LT.0.999) isMeshFile=.FALSE.
+END IF
+DO i=1,nDataSets
+  IF(.NOT.isMeshFile) EXIT
+  CALL DatasetExists(File_ID,DataSets(i),isMeshFile)
+END DO! i=1,nDataSets
+CALL CloseDataFile()
+END SUBROUTINE CheckIfMesh
+
 
 
 END MODULE MODH_Mesh_ReadIn

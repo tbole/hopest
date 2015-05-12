@@ -25,6 +25,10 @@ INTERFACE OpenDataFile
   MODULE PROCEDURE OpenHDF5File
 END INTERFACE
 
+INTERFACE DataSetExists
+  MODULE PROCEDURE DataSetExists
+END INTERFACE
+
 INTERFACE CloseDataFile
   MODULE PROCEDURE CloseHDF5File
 END INTERFACE
@@ -109,6 +113,45 @@ CALL H5PCLOSE_F(Plist_ID, iError)
 LOGWRITE(*,*)'...DONE!'
 END SUBROUTINE OpenHDF5File
 
+
+SUBROUTINE DatasetExists(Loc_ID,DSetName,Exists,attrib)
+!===================================================================================================================================
+! Subroutine to check wheter a dataset on the hdf5 file exists
+!===================================================================================================================================
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+CHARACTER(LEN=*)                     :: DSetName
+INTEGER(HID_T),INTENT(IN)            :: Loc_ID
+LOGICAL,INTENT(IN),OPTIONAL          :: attrib
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+LOGICAL,INTENT(OUT)                  :: Exists
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER(HID_T)                       :: DSet_ID
+INTEGER                              :: hdferr
+!===================================================================================================================================
+! we have no "h5dexists_f", so we use the error given by h5dopen_f.
+! this produces hdf5 error messages even if everything is ok, so we turn the error msgs off 
+! during this operation.
+! auto error messages off
+CALL h5eset_auto_f(0, hdferr)
+! Open the dataset with default properties.
+IF(PRESENT(attrib).AND.attrib)THEN
+  CALL H5AOPEN_F(Loc_ID, TRIM(DSetName), DSet_ID, iError)
+  CALL H5ACLOSE_F(DSet_ID, iError)
+ELSE
+  CALL H5DOPEN_F(Loc_ID, TRIM(DSetName), DSet_ID, iError)
+  CALL H5DCLOSE_F(DSet_ID, iError)
+END IF
+Exists=.TRUE.
+IF(iError.LT.0) Exists=.FALSE.
+! auto error messages on
+CALL h5eset_auto_f(1, hdferr)
+END SUBROUTINE DatasetExists
 
 
 SUBROUTINE CloseHDF5File()

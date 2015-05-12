@@ -290,7 +290,7 @@ DO iElem=1,nElems
   DO PlocSide=0,5
     BCIndex=Trees(iTree)%ep%Side(P2H_FaceMap(PlocSide))%sp%BCIndex
     IF (BCIndex.NE.0) THEN 
-      IF (BoundaryType(BCIndex,1).NE.1) THEN ! we dont want to correct periodic BC
+      IF (BoundaryType(1,BCIndex).NE.1) THEN ! we dont want to correct periodic BC
         BCSide(PlocSide)=.TRUE.
         nBCs=nBCs+1
       END IF
@@ -550,10 +550,10 @@ DO iTree=1,nTrees
   DEALLOCATE(Trees(iTree)%ep)
 END DO
 DEALLOCATE(Trees)
-DO iNode=1,nNodes
-    DEALLOCATE(Nodes(iNode)%np)
+DO iNode=1,nUniqueNodes
+  ADEALLOCATE(UniqueNodes(iNode)%np)
 END DO
-DEALLOCATE(Nodes)
+DEALLOCATE(UniqueNodes)
 SDEALLOCATE(XGeo)
 SDEALLOCATE(HexMap)
 SDEALLOCATE(HexMap_out)

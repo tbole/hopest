@@ -33,6 +33,7 @@ PUBLIC :: ISVALIDHDF5FILE,GetDataSize
 PUBLIC :: ReadArray,ReadAttribute
 PUBLIC :: File_ID,HSize,nDims        ! Variables that need to be public
 PUBLIC :: OpenDataFile,CloseDataFile ! Subroutines that need to be public
+PUBLIC :: DataSetExists
 !===================================================================================================================================
 
 CONTAINS
