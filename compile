@@ -11,6 +11,9 @@ EOF
 
 FIRST=
 COMPILER='GNU'
+BUILDHDF5=
+
+
 
 #First the bootstrapper:
 if [[ $FIRST == T ]]; then
@@ -18,29 +21,56 @@ if [[ $FIRST == T ]]; then
   ./bootstrap
 fi
 
-
 if [[ $? != 0 ]]; then
   exit $?
 fi
 
+# Set compilers
 if [[ $COMPILER == *GNU* ]]; then
+  CC="gcc"
+  FC="gfortran"
+elif [[ $COMPILER == *INTEL* ]]; then
+  CC="icc"
+  FC="ifort"
+fi
+
+# HDF5 stuff
+if [[ ! -d "$HDF5_DIR" ]]; then
+  BUILDHDF5=T
+else
+  HDF5_BASE=$HDF5_DIR
+fi
+if [[ $BUILDHDF5 == T ]]; then
   cd hdf5
-  make CC="gcc" FC="gfortran"
+  make CC=$CC FC=$FC
   cd ..
-  cd tecplot
-  make CC="gcc" FC="gfortran"
-  cd ..
+  HDF5_BASE=hdf5/hdf5-1.8.14/hdf5
+fi
+
+# build Tecplot plugin
+cd tecplot
+make CC=$CC FC=$FC
+cd ..
+
+# configure Hopest
+if [[ $COMPILER == *GNU* ]]; then
+  WARNFLAGS="-Wall -Wextra -DGNU"
+  FCFLAGS="-cpp -fdefault-real-8 -fdefault-double-8 -fbackslash"
   if [[ $COMPILER == *DEBUG* ]]; then
     #FOR DEBUGGING
-    ./configure CFLAGS="-Wall -Wuninitialized -O0 -g" FCFLAGS="-cpp -fdefault-real-8 -fdefault-double-8 -fbackslash -g -O0 -ggdb3 -fbounds-check -finit-real=nan -fbacktrace -DGNU" --with-hdf5=hdf5/hdf5-1.8.14/hdf5 --with-tecio=tecplot/tecio-12.0 --enable-debug --disable-shared
+    ./configure CFLAGS="$WARNFLAGS -O0 -g" FCFLAGS="$FCFLAGS -g -O0 -ggdb3 -fbounds-check -finit-real=nan -fbacktrace" --with-hdf5="$HDF5_BASE" --with-tecio=tecplot/tecio-12.0 --enable-debug --disable-shared
   else
     #FOR OPTIMIZATION
-    ./configure CFLAGS="-Wall -Wuninitialized -O2" FCFLAGS="-cpp -fdefault-real-8 -fdefault-double-8 -fbackslash -O2" --with-hdf5=hdf5/hdf5-1.8.14/hdf5 --with-tecio=tecplot/tecio-12.0 --disable-shared
+    ./configure CFLAGS="$WARNFLAGS -O2" FCFLAGS="$FCFLAGS $WARNFLAGS -O2" --with-hdf5="$HDF5_BASE" --with-tecio=tecplot/tecio-12.0 --disable-shared
   fi
 elif [[ $COMPILER == *INTEL* ]]; then
-  cd hdf5
-  make CC=icc FC=ifort
-  cd ..
+  WARNFLAGS="-traceback -warn all -DINTEL"
+  FCFLAGS="-fpp -assume bscc -r8 -i4"
+  if [[ $COMPILER == *DEBUG* ]]; then
+    ./configure CFLAGS="$WARNFLAGS -check all -O0 -g -fpe0" FCFLAGS="$WARNFLAGS $FCFLAGS -g -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,bounds,uninit" --with-hdf5="$HDF5_BASE" --with-tecio=tecplot/tecio-12.0 --enable-debug --disable-shared
+  else
+    ./configure CFLAGS="$WARNFLAGS -O2" FCFLAGS="$WARNFLAGS $FCFLAGS -O2" --with-hdf5="$HDF5_BASE" --with-tecio=tecplot/tecio-12.0 --disable-shared
+  fi
 fi
 
 # Compile stuff.  V=0 cleans up the compiler messages.
