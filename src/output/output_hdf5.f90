@@ -34,6 +34,7 @@ USE MODH_Mesh_Vars
 USE MODH_IO_HDF5
 USE MODH_HDF5_output
 USE MODH_ChangeBasis, ONLY:ChangeBasis3D
+USE MODH_P4EST_Vars,  ONLY:QuadToTree,QuadCoords,QuadLevel,sIntSize
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -50,6 +51,8 @@ TYPE(tSide),POINTER            :: Side
 INTEGER,ALLOCATABLE            :: ElemInfo(:,:),SideInfo(:,:),NodeInfo(:),GlobalNodeIDs(:)
 REAL,ALLOCATABLE               :: ElemBary(:,:)
 REAL,ALLOCATABLE               :: ElemWeight(:)
+REAL,ALLOCATABLE               :: xiMinMax(:,:,:)
+REAL                           :: length
 INTEGER                        :: iElem,i
 INTEGER                        :: NodeID,iNode,iType
 INTEGER                        :: iSide,SideID,iLocSide,iMortar
@@ -195,8 +198,6 @@ END DO
 nNodeIDs=(Ngeo_out+1)**3*nElems
 CALL WriteArrayToHDF5(File_ID,'NodeCoords',2,(/3,nNodeIDs/),(/3,nNodeIDs/),(/0,0/),&
                       collective=.FALSE.,RealArray=XGeoElem)
-DEALLOCATE(XGeoElem)
-
 
 !-----------------------------------------------------------------
 !fill ElementInfo. 
@@ -261,8 +262,6 @@ CALL WriteArrayToHDF5(File_ID,'ElemWeight',1,(/nElems/),(/nElems/),(/0/),&
                               collective=.FALSE.,RealArray=ElemWeight)
 DEALLOCATE(ElemWeight)
 
-
-
 !-----------------------------------------------------------------
 !fill SideInfo
 !-----------------------------------------------------------------
@@ -320,7 +319,39 @@ CALL WriteArrayToHDF5(File_ID,'GlobalNodeIDs',1,(/nNodeIDs/),(/nNodeIDs/),(/0/),
                       collective=.FALSE.,IntArray=GlobalNodeIDs)
 DEALLOCATE(GlobalNodeIDs)
 
-! Close the file.
+!-----------------------------------------------------------------
+! Additional information which is only defined for mortar meshes
+!-----------------------------------------------------------------
+nNodeIDs=(Ngeo+1)**3*nTrees
+CALL WriteAttributeToHDF5(File_ID,'isMortarMesh',1,IntScalar=1)
+CALL WriteAttributeToHDF5(File_ID,'NgeoTree',1,IntScalar=Ngeo)
+CALL WriteAttributeToHDF5(File_ID,'nTrees',1,IntScalar=nTrees)
+CALL WriteAttributeToHDF5(File_ID,'nNodesTree',1,IntScalar=nNodeIDs)
+!-----------------------------------------------------------------
+! WRITE TreeCoords for each tree !!!! (multiple nodes!!!)
+!-----------------------------------------------------------------
+CALL WriteArrayToHDF5(File_ID,'TreeCoords',2,(/3,nNodeIDs/),(/3,nNodeIDs/),(/0,0/),&
+                      collective=.FALSE.,RealArray=XGeo)
+!-----------------------------------------------------------------
+! WRITE QuadToTree for each quadrant !!!!
+!-----------------------------------------------------------------
+QuadToTree=QuadToTree+1 ! 0-based to 1-based
+CALL WriteArrayToHDF5(File_ID,'ElemToTree',1,(/nElems/),(/nElems/),(/0/),&
+                      collective=.FALSE.,IntArray=QuadToTree)
+QuadToTree=QuadToTree-1 ! revert
+!-----------------------------------------------------------------
+! WRITE xiMinMax for each quadrant !!!!
+!-----------------------------------------------------------------
+ALLOCATE(xiMinMax(3,2,nElems))
+DO iElem=1,nElems
+  xiMinMax(:,1,iElem)=-1.+2.*REAL(QuadCoords(:,iElem))*sIntSize
+  length=2./REAL(2**QuadLevel(iElem))
+  xiMinMax(:,2,iElem)=xiMinMax(:,1,iElem)+length
+END DO
+CALL WriteArrayToHDF5(File_ID,'xiMinMax',3,(/3,2,nElems/),(/3,2,nElems/),(/0,0,0/),&
+                      collective=.FALSE.,RealArray=xiMinMax)
+DEALLOCATE(xiMinMax)
+!-----------------------------------------------------------------
 CALL CloseHDF5File()
 
 WRITE(*,'(A)')' DONE WRITING MESH.'
