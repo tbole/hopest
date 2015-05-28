@@ -33,7 +33,6 @@ SUBROUTINE InitRefine()
 ! MODULES
 USE MODH_Globals
 USE MODH_Refine_Vars
-USE MODH_Mesh_Vars,     ONLY: Ngeo
 USE MODH_Readintools,   ONLY: GETINT,CNTSTR
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -95,7 +94,6 @@ USE MODH_Mesh_Vars,   ONLY: BoundaryName,nBCs
 USE MODH_Refine_Vars, ONLY: tRefineBC
 USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap
 USE MODH_Readintools, ONLY: GETSTR,GETREAL
-USE MODH_p4est_Vars,  ONLY: sIntSize
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -135,7 +133,7 @@ END DO
 
 ! set the target length in p4est qcoords
 rBC%targetLength=GETREAL('refineBoundaryThickness','0')
-IF(rBC%targetLength.EQ.0.) THEN  ! only refine in direct neighborhood of the BC
+IF(ABS(rBC%targetLength).LT.1.E-15) THEN  ! only refine in direct neighborhood of the BC
   rBC%targetLength=2./REAL(2**(refineLevel))
 END IF
 END SUBROUTINE InitRefineBC
@@ -284,7 +282,7 @@ FUNCTION RefineBC(x,y,z,tree,level,rBC)
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MODH_p4est_Vars, ONLY:IntSize,sIntSize
+USE MODH_p4est_Vars, ONLY:sIntSize
 USE MODH_Refine_vars,ONLY:tRefineBC
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -348,12 +346,11 @@ INTEGER(KIND=C_INT) :: refineByGeom
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                  :: xi0(3)
-REAL                                  :: xiBary(3)
+REAL                                  :: xiBary(3),XBaryElem(3)
 REAL                                  :: dxi,length
-REAL,DIMENSION(0:Nsuper,0:Ngeo)       :: Vdm_xi,Vdm_eta,Vdm_zeta
-REAL                                  :: XCorner(3), XBaryElem(3),test
 REAL                                  :: XGeoSuper(3,0:Nsuper,0:Nsuper,0:Nsuper)
 REAL                                  :: l_xi(0:NGeo),l_eta(0:NGeo),l_zeta(0:NGeo),l_etazeta
+REAL,DIMENSION(0:Nsuper,0:Ngeo)       :: Vdm_xi,Vdm_eta,Vdm_zeta
 INTEGER                               :: i,j,k
 !===================================================================================================================================
 ! TODO :

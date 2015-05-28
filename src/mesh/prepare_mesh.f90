@@ -42,7 +42,7 @@ SUBROUTINE setLocalSideIDs()
 ! MODULES
 USE MODH_Globals
 USE MODH_Mesh_Vars,  ONLY: tElem,tSide
-USE MODH_Mesh_Vars,  ONLY: nElems,nInnerSides,nSides,nBCSides,offsetElem
+USE MODH_Mesh_Vars,  ONLY: nElems,nInnerSides,nBCSides
 USE MODH_Mesh_Vars,  ONLY: Elems,nMPISides_MINE,nMPISides_YOUR,BoundaryType,nBCs
 USE MODH_Mesh_Vars,  ONLY: nMortarSides 
 #ifdef MPI
@@ -384,9 +384,8 @@ SUBROUTINE fillMeshInfo()
 !===================================================================================================================================
 ! MODULES
 USE MODH_Globals
-USE MODH_Mesh_Vars,ONLY:tElem,tSide,BoundaryType
-USE MODH_Mesh_Vars,ONLY:nElems,offsetElem,nSides,nInnerSides,nBCSides,nMPISides,nMortarSides
-USE MODH_Mesh_Vars,ONLY:nMPISides_MINE
+USE MODH_Mesh_Vars,ONLY:tElem,tSide
+USE MODH_Mesh_Vars,ONLY:nElems,offsetElem,nBCSides
 USE MODH_Mesh_Vars,ONLY:ElemToSide,SideToElem,BC,AnalyzeSide
 USE MODH_Mesh_Vars,ONLY:Elems
 USE MODH_Mesh_Vars,ONLY:MortarType,Mortar_nbSideID,Mortar_Flip
@@ -401,9 +400,9 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER             :: iElem,iSide,LocSideID,nSides_flip(0:4)
+INTEGER             :: iElem,LocSideID,nSides_flip(0:4)
 INTEGER             :: nSides_MortarType(1:3)
-INTEGER             :: iMortar,nMortars
+INTEGER             :: iMortar
 TYPE(tElem),POINTER :: aElem
 TYPE(tSide),POINTER :: aSide
 !===================================================================================================================================

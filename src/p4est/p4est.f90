@@ -52,7 +52,6 @@ SUBROUTINE InitP4EST()
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MODH_Globals,       ONLY: hopestMode
 USE MODH_P4EST_Vars,    ONLY: p4estFile,IntSize,sIntSize
 USE MODH_P4EST_Binding, ONLY: p4_initvars
 USE MODH_Output_Vars,   ONLY: Projectname
@@ -100,10 +99,7 @@ INTEGER                     :: PSide,PnbSide,nbSide,iSide
 INTEGER                     :: nbElemInd
 INTEGER                     :: PMortar,PFlip,HFlip,QHInd
 INTEGER                     :: iLocSide
-INTEGER                     :: StartElem,EndElem
-INTEGER                     :: BClocSide,BCindex
 INTEGER(KIND=8)             :: offsetElemTmp,nGlobalElemsTmp
-LOGICAL                     :: doConnection
 !===================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)')'GENERATE HOPEST MESH FROM P4EST ...'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -112,8 +108,8 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 CALL p4_build_mesh(p4est,mesh)
 ! Get arrays from p4est: use pointers for c arrays (QT,QQ,..), duplicate data for QuadCoords,Level
 CALL p4_get_mesh_info(p4est,mesh,nElems,nGlobalElemsTmp,offsetElemTmp,nHalfFaces,nTrees)
-offsetElem=offsetElemTmp
-nGlobalElems=nGlobalElemsTmp
+offsetElem=INT(offsetElemTmp,4)
+nGlobalElems=INT(nGlobalElemsTmp,4)
 
 ALLOCATE(QuadCoords(3,nElems),QuadLevel(nElems)) ! big to small flip
 QuadCoords=0
@@ -423,7 +419,7 @@ FUNCTION GetHMortar(PMortar,PSide,PnbSide,PFlip)
 ! Transform a p4est mortar ID to a HOPR mortar ID 
 !===================================================================================================================================
 ! MODULES
-USE MODH_P4EST_Vars,ONLY:P2H_FaceMap,H2P_FaceNodeMap,P2H_FaceNodeMap,P4R,P4Q,P4P
+USE MODH_P4EST_Vars,ONLY:P2H_FaceNodeMap,P4R,P4Q,P4P
 USE MODH_P4EST_Vars,ONLY:H_MortarCase,P2H_MortarMap
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -579,7 +575,7 @@ SUBROUTINE FinalizeP4EST()
 !===================================================================================================================================
 ! MODULES
 USE, INTRINSIC :: ISO_C_BINDING
-USE MODH_P4EST_Vars,   ONLY: QuadCoords,QuadLevel,p4est,mesh,connectivity
+USE MODH_P4EST_Vars,   ONLY: QuadCoords,QuadLevel,p4est,mesh
 USE MODH_Mesh_Vars,    ONLY: nElems,Elems
 USE MODH_P4EST_Binding
 ! IMPLICIT VARIABLE HANDLING

@@ -60,7 +60,6 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER :: i
 !===================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MESH ...'
@@ -183,11 +182,10 @@ USE MODH_P4EST_Vars,  ONLY: QuadToTree,QuadCoords,QuadLevel,sIntSize
 USE MODH_Basis,       ONLY: LagrangeInterpolationPolys,InitializeVandermonde
 USE MODH_ChangeBasis, ONLY: ChangeBasis3D, ChangeBasis3D_XYZ 
 USE MODH_ChangeBasis, ONLY: ChangeBasis2D_XY
-USE MODH_Mesh_Vars,   ONLY: Vdm_01,Vdm_10
 USE MODH_Mesh_Vars,   ONLY: Elems,BoundaryType
 USE MODH_Mesh_Vars,   ONLY: Ngeo_out,xiCL_Ngeo_out
 USE MODH_Mesh_Vars,   ONLY: blending_glob
-USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap,P_FaceToEdge,P_EdgeToFaces,P2H_VertexMap
+USE MODH_P4EST_Vars,  ONLY: P2H_FaceMap,P2H_VertexMap
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -205,13 +203,10 @@ REAL                              :: XGeo_tree(3,0:NGeo_out,0:NGeo_out,0:NGeo_ou
 !-----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL                           :: BCSide(0:5)
 INTEGER                           :: j,k,plus,BCIndex
-INTEGER                           :: Pmortar,PlocSide,PoppSide,nBCs,iNode,NodeSum 
+INTEGER                           :: PlocSide,PoppSide,nBCs,iNode,NodeSum 
 INTEGER                           :: MortarType(0:5)
-INTEGER                           :: dir0
-REAL                              :: PI 
 REAL,DIMENSION(0:Ngeo_out,0:Ngeo) :: Vdm_xi2,Vdm_eta2,Vdm_zeta2
-REAL,DIMENSION(0:Ngeo_out,0:Ngeo) :: Vdm_a,Vdm_b
-REAL                              :: NodeMark(0:1,0:1,0:1),markTmp,lengthIJK(3),xi0IJK(3),xi(3)
+REAL                              :: NodeMark(0:1,0:1,0:1),lengthIJK(3),xi0IJK(3),xi(3)
 REAL                              :: xGeoElem_corr(3,0:NGeo_out,0:NGeo_out,0:NGeo_out)
 REAL                              :: blending(0:NGeo_out,0:NGeo_out,0:NGeo_out)
 !===================================================================================================================================
@@ -441,7 +436,7 @@ REAL,INTENT(INOUT)         :: Vol(1:dim1,0:N_in,0:N_in,0:N_in) !unchanged volume
 ! LOCAL VARIABLES
 INTEGER                    :: i,j,k
 REAL                       :: xi0(0:N_in),xiN(0:N_in)
-REAL                       :: dVol(1:dim1,0:N_in,0:N_in,0:N_in) !Face data, inner points will be overwritten
+!REAL                       :: dVol(1:dim1,0:N_in,0:N_in,0:N_in) !Face data, inner points will be overwritten
 !-----------------------------------------------------------------------------------------------------------------------------------
 IF(N_in.EQ.1) THEN
   Vol=Vol_in

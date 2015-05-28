@@ -46,20 +46,19 @@ CHARACTER(LEN=*),INTENT(IN)    :: FileString
 ! LOCAL VARIABLES
 
 TYPE(tElem),POINTER            :: Elem
-TYPE(tElem),POINTER            :: master
 TYPE(tSide),POINTER            :: Side
-INTEGER,ALLOCATABLE            :: ElemInfo(:,:),SideInfo(:,:),NodeInfo(:),GlobalNodeIDs(:)
+INTEGER,ALLOCATABLE            :: ElemInfo(:,:),SideInfo(:,:),GlobalNodeIDs(:)
 REAL,ALLOCATABLE               :: ElemBary(:,:)
 REAL,ALLOCATABLE               :: ElemWeight(:)
 REAL,ALLOCATABLE               :: xiMinMax(:,:,:)
 REAL                           :: length
 INTEGER                        :: iElem,i
-INTEGER                        :: NodeID,iNode,iType
+INTEGER                        :: NodeID,iNode
 INTEGER                        :: iSide,SideID,iLocSide,iMortar
 INTEGER                        :: ElemCounter(2,11)
 INTEGER                        :: nSideIDs,nNodeIDs
 INTEGER                        :: nTotalSides
-INTEGER                        :: locnSides,locnNodes,offsetID
+INTEGER                        :: locnSides
 !===================================================================================================================================
 WRITE(*,'(132("~"))')
 WRITE(*,'(A)')' WRITE MESH TO HDF5 FILE... ' // TRIM(FileString) 

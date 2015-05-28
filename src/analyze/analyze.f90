@@ -88,6 +88,7 @@ IF(CheckJacobian) CALL CheckJac()
 IF(doDebugVisu)   CALL DebugVisu()
 END SUBROUTINE Analyze
 
+
 SUBROUTINE DebugVisu()
 !===================================================================================================================================
 ! Basic Analyze initialization. 
@@ -107,17 +108,12 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 CHARACTER(LEN=255)                    :: VarNames(1)
-INTEGER                               :: iElem,i
-REAL                                  :: length,dxi
-REAL,DIMENSION(0:Ngeo_out,0:NGeo_out) :: Vdm_xi,Vdm_eta,Vdm_zeta
-REAL                                  :: XGeo_visu(3,0:NGeo_out,0:NGeo_out,0:Ngeo_out,nElems)
 !===================================================================================================================================
-
 WRITE(Unit_StdOut,'(A,A)') ' Writing Debugmesh to Tecplot: ',TRIM(ProjectName)//'_p4est_Debugmesh.vtu'
 VarNames(1)='blending'
 CALL WriteDataToVTK3D(Ngeo_out,nElems,2,VarNames,xGeoElem,blending_glob,TRIM(ProjectName)//'_p4est_Debugmesh.vtu')
-
 END SUBROUTINE DebugVisu
+
 
 SUBROUTINE CheckJac()
 !===================================================================================================================================

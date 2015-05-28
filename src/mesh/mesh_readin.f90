@@ -50,7 +50,7 @@ INTEGER                        :: iBC,Offset
 !===================================================================================================================================
 ! Get number of boundary condtions
 CALL GetDataSize(File_ID,'BCNames',nDims,HSize)
-nBCs=HSize(1)
+nBCs=INT(HSize(1),4)
 DEALLOCATE(HSize)
 CALL GetDataSize(File_ID,'BCType',nDims,HSize)
 IF(HSize(2).NE.nBCs) STOP 'Problem in readBC'
@@ -183,34 +183,25 @@ CHARACTER(LEN=*),INTENT(IN)    :: FileString
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL,ALLOCATABLE               :: NodeCoordsTmp(:,:,:,:,:)
 INTEGER                        :: i,j,k,l
 INTEGER                        :: FirstElemInd,LastElemInd
 INTEGER                        :: FirstSideInd,LastSideInd
 INTEGER                        :: nbLocSide,offsetSideID
 INTEGER                        :: BCindex
-INTEGER                        :: iElem,iTree,ElemID
-INTEGER                        :: iNode,jNode,NodeID,SideID
-INTEGER                        :: iLocSide,jLocSide
-INTEGER                        :: iSide
-LOGICAL                        :: oriented
-INTEGER                        :: nPeriodicSides 
-LOGICAL                        :: fileExists
-LOGICAL                        :: doConnection
+INTEGER                        :: iElem,iTree,ElemID,iNode
+INTEGER                        :: iLocSide,iSide
+INTEGER                        :: nPeriodicSides,nSideIDs
+INTEGER                        :: C2V(3,8) ! Volume to 1D corner node mapping
+INTEGER,ALLOCATABLE            :: ElemInfo(:,:),SideInfo(:,:),GlobalNodeIDs(:,:,:,:)
+LOGICAL                        :: oriented,fileExists,doConnection
 TYPE(tElem),POINTER            :: aElem
 TYPE(tSide),POINTER            :: aSide,bSide
 TYPE(tNode),POINTER            :: aNode
-INTEGER,ALLOCATABLE            :: ElemInfo(:,:),SideInfo(:,:),NodeInfo(:)
-INTEGER                        :: nNodeIDs,nSideIDs
-INTEGER,ALLOCATABLE            :: GlobalNodeIDs(:,:,:,:)
-INTEGER                        :: C2V(3,8) ! Volume to 1D corner node mapping
 ! p4est interface
-INTEGER                        :: num_vertices
-INTEGER                        :: num_trees
-INTEGER                        :: num_periodics,iPeriodic,PFlip,HFlip,HFlip_test
-INTEGER,ALLOCATABLE            :: tree_to_vertex(:,:)
+INTEGER                        :: num_vertices,num_trees,num_periodics,iPeriodic
+INTEGER                        :: PFlip,HFlip,HFlip_test
+INTEGER,ALLOCATABLE            :: tree_to_vertex(:,:),JoinFaces(:,:)
 REAL,ALLOCATABLE               :: vertices(:,:)
-INTEGER,ALLOCATABLE            :: JoinFaces(:,:)
 !===================================================================================================================================
 INQUIRE (FILE=TRIM(FileString), EXIST=fileExists)
 IF(.NOT.FileExists)  &
@@ -269,25 +260,6 @@ DO iElem=1,nElems
     UniqueNodes(l)%np%tmp=-1
   END DO
 END DO
-
-! remap to linear mesh, use only corner nodes
-!IF(.NOT.useCurveds)THEN
-!  ALLOCATE(XGeoTmp(3,0:NGeo,0:NGeo,0:NGeo,nElems))
-!  XGeoTmp=XGeo
-!  DEALLOCATE(XGeo)
-!  ALLOCATE(XGeo(3,0:1,0:1,0:1,nElems))
-!  XGeo(:,0,0,0,:)=XGeoTmp(:,0,   0,   0,   :)
-!  XGeo(:,1,0,0,:)=XGeoTmp(:,NGeo,0,   0,   :)
-!  XGeo(:,0,1,0,:)=XGeoTmp(:,0,   NGeo,0,   :)
-!  XGeo(:,1,1,0,:)=XGeoTmp(:,NGeo,NGeo,0,   :)
-!  XGeo(:,0,0,1,:)=XGeoTmp(:,0,   0,   NGeo,:)
-!  XGeo(:,1,0,1,:)=XGeoTmp(:,NGeo,0,   NGeo,:)
-!  XGeo(:,0,1,1,:)=XGeoTmp(:,0,   NGeo,NGeo,:)
-!  XGeo(:,1,1,1,:)=XGeoTmp(:,NGeo,NGeo,NGeo,:)
-!  DEALLOCATE(XGeoTmp)
-!  NGeo=1
-!  nNodes=nElems*(NGeo+1)**3
-!ENDIF
 
 !----------------------------------------------------------------------------------------------------------------------------
 !                              ELEMENTS
@@ -358,7 +330,6 @@ DO iElem=FirstElemInd,LastElemInd
   END DO !i=1,locnSides
 END DO !iElem
 
- 
 ! build up side connection 
 DO iElem=FirstElemInd,LastElemInd
   aElem=>Trees(iElem)%ep
@@ -587,7 +558,7 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 CALL OpenDataFile(FileString,create=.FALSE.,single=.FALSE.)
 
 CALL GetDataSize(File_ID,'NodeCoords',nDims,HSize)
-nNodes=HSize(1) !global number of unique nodes
+nNodes=INT(HSize(1),4) !global number of unique nodes
 DEALLOCATE(HSize)
 
 !----------------------------------------------------------------------------------------------------------------------------

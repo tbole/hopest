@@ -159,7 +159,7 @@ SUBROUTINE CloseHDF5File()
 ! Close HDF5 file and groups
 !===================================================================================================================================
 ! MODULES
-USE MODH_Globals,ONLY:UNIT_stdOut,UNIT_logOut,Logging
+USE MODH_Globals,ONLY:UNIT_logOut,Logging
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------

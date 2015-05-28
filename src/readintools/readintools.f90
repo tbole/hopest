@@ -441,6 +441,8 @@ ELSE
 END IF
 SWRITE(UNIT_StdOut,*)'| Reading from file "',TRIM(File),'":'
 
+nLines=-1
+iniUnit=-1
 IF (MPIRoot) THEN
   iniUnit=GETFREEUNIT()
   OPEN(UNIT   = iniUnit,    &
@@ -453,7 +455,6 @@ IF (MPIRoot) THEN
     CALL abort(__STAMP__,&
     "Could not open ini file.")
   ELSE
-    nLines=0
     stat=0
     DO
       READ(iniunit,"(A)",IOSTAT=stat)tmpChar
