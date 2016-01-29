@@ -155,12 +155,8 @@ CALL OpenHDF5File(FileString,create=.TRUE.,single=.TRUE.)
 !-----------------------------------------------------------------
 !attributes 
 !-----------------------------------------------------------------
-IF(Ngeo_out.EQ.1) THEN
-  useCurveds=.FALSE.
-  nCurvedNodes=0
-ELSE
-  nCurvedNodes=(Ngeo_out+1)**3
-END IF
+IF(Ngeo_out.EQ.1) useCurveds=.FALSE.
+nCurvedNodes=(Ngeo_out+1)**3
 
 CALL WriteAttributeToHDF5(File_ID,'Ngeo',1,IntScalar=Ngeo_out)
 
